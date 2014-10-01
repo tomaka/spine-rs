@@ -71,8 +71,10 @@ impl SpineDocument {
     /// Returns the duration of an animation.
     ///
     /// Returns `None` if the animation doesn't exist.
+    /// 
+    /// TODO: implement
     pub fn get_animation_duration(&self, animation: &str) -> Option<f32> {
-        unimplemented!()
+        Some(1.0)
     }
 
     /// Returns a list of all possible sprites when drawing.
@@ -97,9 +99,17 @@ impl SpineDocument {
     // TODO: implement draw order timeline
     // TODO: implement events
     // TODO: implement other attachment types
-    pub fn calculate(&self, skin: &str, animation: Option<&str>, elapsed: f32) 
+    pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32) 
         -> Result<Calculation, ()>
     {
+        // adapting elapsed
+        if let Some(animation) = animation {
+            if let Some(duration) = self.get_animation_duration(animation) {
+                elapsed = elapsed % duration;
+            }
+        }
+        let elapsed = elapsed;
+
         // getting a reference to the `format::Skin`
         let skin = try!(self.source.skins.as_ref().and_then(|l| l.find_equiv(&skin)).ok_or(()));
 
@@ -111,7 +121,7 @@ impl SpineDocument {
         };
 
         // calculating the default pose of all bones
-        let mut bones: Vec<(&format::Bone, BoneData)> = self.source.bones.as_ref().map(|bones| {
+        let mut bones: Vec<(&format::Bone, Matrix4<f32>)> = self.source.bones.as_ref().map(|bones| {
             bones.iter().map(|bone| (bone, get_bone_default_local_setup(bone))).collect()
         }).unwrap_or_else(|| Vec::new());
 
@@ -124,7 +134,7 @@ impl SpineDocument {
 
                     // adding this to the `bones` vec above
                     match bones.iter_mut().find(|&&(b, _)| b.name == *bone_name) {
-                        Some(&(_, ref mut data)) => { *data = *data + anim_data; },
+                        Some(&(_, ref mut data)) => { *data = *data * anim_data; },
                         None => ()
                     };
                 }
@@ -133,12 +143,12 @@ impl SpineDocument {
 
         // now we have our list of bones with their relative positions
         // adding the position of the parent to each bone
-        let bones: Vec<(&str, BoneData)> = bones.iter().map(|&(ref bone, ref relative_data)| {
+        let bones: Vec<(&str, Matrix4<f32>)> = bones.iter().map(|&(ref bone, ref relative_data)| {
             assert!(bone.parent.as_ref() != Some(&bone.name));
 
             if let Some(ref parent_name) = bone.parent {
                 match bones.iter().find(|&&(b, _)| b.name == *parent_name) {
-                    Some(ref p) => (bone.name.as_slice(), relative_data + p.1),
+                    Some(ref p) => (bone.name.as_slice(), p.1 * *relative_data),
                     None => (bone.name.as_slice(), relative_data.clone())       // TODO: return error instead
                 }
                 
@@ -149,7 +159,7 @@ impl SpineDocument {
 
         // now taking each slot in the document and matching its bone
         // `slots` contains the slot name, bone data, color, and attachment
-        let slots: Vec<(&str, BoneData, Option<&str>, Option<&str>)> =
+        let slots: Vec<(&str, Matrix4<f32>, Option<&str>, Option<&str>)> =
             if let Some(slots) = self.source.slots.as_ref() {
                 let mut result = Vec::new();
 
@@ -179,7 +189,7 @@ impl SpineDocument {
                     .find(|&(a, _)| Some(a.as_slice()) == attachment).ok_or(()));
 
                 let attachment_transform = get_attachment_transformation(attachment.1);
-                let bone_data = (bone_data + attachment_transform).to_matrix();
+                let bone_data = (bone_data * attachment_transform);
 
                 results.push((
                     attachment.0.as_slice(),
@@ -204,6 +214,9 @@ pub struct Calculation<'a> {
     /// The list of sprites that should be drawn.
     ///
     /// The elements are sorted from bottom to top, ie. each element can cover the previous one.
+    ///
+    /// The matrix assumes that the sprite is displayed from (-1, -1) to (1, 1), ie. would cover
+    ///  the whole screen.
     pub sprites: Vec<(&'a str, Matrix4<f32>, Rgba<u8>)>,
 }
 
@@ -219,52 +232,42 @@ struct BoneData {
 
 impl BoneData {
     fn to_matrix(&self) -> Matrix4<f32> {
+        use cgmath::{Matrix2, Vector3, ToMatrix4, ToRad};
         use std::num::FloatMath;
 
-        let cos = self.rotation.cos();
-        let sin = self.rotation.sin();
+        let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0, 0.0, self.scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
 
-        // TODO: check that it's correct
-        Matrix4::new(cos * self.scale.0,    sin * self.scale.1,     0.0,    0.0,
-                     -sin * self.scale.0,   cos * self.scale.1,     0.0,    0.0,
-                     0.0,                   0.0,                    1.0,    0.0,
-                     self.position.0,       self.position.1,        0.0,    1.0)
-    }
-}
+        let rotation_matrix = Matrix2::from_angle(cgmath::deg(self.rotation).to_rad()).to_matrix4();
 
-impl Add<BoneData, BoneData> for BoneData {
-    fn add(&self, rhs: &BoneData) -> BoneData {
-        BoneData {
-            position: (self.position.0 + rhs.position.0, self.position.1 + rhs.position.1),
-            rotation: self.rotation + rhs.rotation,
-            scale: (self.scale.0 * rhs.scale.0, self.scale.1 * rhs.scale.1),
-        }
+        let translation_matrix = Matrix4::from_translation(&Vector3::new(self.position.0, self.position.1, 0.0));
+
+        translation_matrix * rotation_matrix * scale_matrix
     }
 }
 
 /// Returns the setup pose of a bone relative to its parent.
-fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
+fn get_bone_default_local_setup(bone: &format::Bone) -> Matrix4<f32> {
     BoneData {
         position: (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
         rotation: bone.rotation.unwrap_or(0.0) as f32,
         scale: (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32),
-    }
+    }.to_matrix()
 }
 
-/// Returns the `BoneData` of an attachment.
-fn get_attachment_transformation(bone: &format::Attachment) -> BoneData {
+/// Returns the `Matrix` of an attachment.
+fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32> {
     BoneData {
-        position: (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
-        rotation: bone.rotation.unwrap_or(0.0) as f32,
+        position: (attachment.x.unwrap_or(0.0) as f32, attachment.y.unwrap_or(0.0) as f32),
+        rotation: attachment.rotation.unwrap_or(0.0) as f32,
         scale: (
-            bone.scaleX.unwrap_or(1.0) as f32 * bone.width.unwrap_or(1.0) as f32,
-            bone.scaleY.unwrap_or(1.0) as f32 * bone.height.unwrap_or(1.0) as f32
+            attachment.scaleX.unwrap_or(1.0) as f32 * attachment.width.unwrap_or(1.0) as f32 / 2.0,
+            attachment.scaleY.unwrap_or(1.0) as f32 * attachment.height.unwrap_or(1.0) as f32 / 2.0
         ),
-    }
+    }.to_matrix()
 }
 
-/// Builds the `BoneData` corresponding to a timeline.
-fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<BoneData, ()> {
+/// Builds the `Matrix4` corresponding to a timeline.
+fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<Matrix4<f32>, ()> {
     // calculating the current position
     let position = if let Some(timeline) = timeline.translate.as_ref() {
         // finding in which interval we are
@@ -356,7 +359,7 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
         position: position,
         rotation: rotation,
         scale: scale,
-    })
+    }.to_matrix())
 }
 
 ///
