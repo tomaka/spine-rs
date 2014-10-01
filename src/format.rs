@@ -111,7 +111,6 @@ pub struct BoneTranslateTimeline {
     pub curve: Option<TimelineCurve>,
     pub x: Option<f64>,
     pub y: Option<f64>,
-    pub angle: Option<f64>,
 }
 
 #[deriving(Show, Clone)]
