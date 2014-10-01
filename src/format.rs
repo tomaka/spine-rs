@@ -10,7 +10,7 @@ use std::collections::HashMap;
 pub struct Document {
     pub bones: Option<Vec<Bone>>,
     pub slots: Option<Vec<Slot>>,
-    pub skins: Option<HashMap<String, SkinSlotsList>>,
+    pub skins: Option<HashMap<String, HashMap<String, HashMap<String, Attachment>>>>,
     pub animations: Option<HashMap<String, Animation>>,
 }
 
@@ -34,17 +34,6 @@ pub struct Slot {
     pub bone: String,
     pub color: Option<String>,
     pub attachment: Option<String>,
-}
-
-#[deriving(Show, Clone)]
-pub struct SkinSlotsList(pub HashMap<String, HashMap<String, Attachment>>);
-
-impl from_json::FromJson for SkinSlotsList {
-    fn from_json(input: &serialize::json::Json) -> Result<SkinSlotsList, from_json::FromJsonError> {
-        use from_json::FromJson;
-
-        Ok(SkinSlotsList(try!(FromJson::from_json(input))))
-    }
 }
 
 #[deriving(Show, Clone)]

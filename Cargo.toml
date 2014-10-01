@@ -6,5 +6,8 @@ authors = [ "pierre.krieger1708@gmail.com" ]
 [dependencies.cgmath]
 git = "https://github.com/bjz/cgmath-rs"
 
+[dependencies.color]
+git = "https://github.com/bjz/color-rs.git"
+
 [dependencies.from_json]
 git = "https://github.com/tomaka/from_json"
