@@ -1,9 +1,12 @@
-extern crate serialize;
+#![allow(dead_code)]
+#![allow(non_snake_case)]
 
+use from_json;
+use serialize;
 use std::collections::HashMap;
-use serialize::{Decoder, Decodable};
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct Document {
     pub bones: Option<Vec<Bone>>,
     pub slots: Option<Vec<Slot>>,
@@ -11,7 +14,8 @@ pub struct Document {
     pub animations: Option<HashMap<String, Animation>>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct Bone {
     pub name: String,
     pub parent: Option<String>,
@@ -23,7 +27,8 @@ pub struct Bone {
     pub rotation: Option<f64>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct Slot {
     pub name: String,
     pub bone: String,
@@ -34,15 +39,19 @@ pub struct Slot {
 #[deriving(Show, Clone)]
 pub struct SkinSlotsList(pub HashMap<String, HashMap<String, Attachment>>);
 
-impl<D: Decoder<E>, E> Decodable<D, E> for SkinSlotsList {
-    fn decode(d: &mut D) -> Result<SkinSlotsList, E> {
-        Decodable::decode(d).map(|v| SkinSlotsList(v))
+impl from_json::FromJson for SkinSlotsList {
+    fn from_json(input: &serialize::json::Json) -> Result<SkinSlotsList, from_json::FromJsonError> {
+        use from_json::FromJson;
+
+        Ok(SkinSlotsList(try!(FromJson::from_json(input))))
     }
 }
 
 #[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct Attachment {
     pub name: Option<String>,
+    #[from_json_name = "type"]
     pub type_: Option<AttachmentType>,
     pub x: Option<f64>,
     pub y: Option<f64>,
@@ -56,405 +65,145 @@ pub struct Attachment {
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 
-#[automatically_derived]
-impl <__D: ::serialize::Decoder<__E>, __E>
-     ::serialize::Decodable<__D, __E> for Attachment {
-    fn decode(__arg_0: &mut __D) ->
-     ::std::result::Result<Attachment, __E> {
-        __arg_0.read_struct("Attachment", 11u,
-                            ref |_d|
-                                ::std::result::Ok(Attachment{name:
-                                                                 match _d.read_struct_field("name",
-                                                                                            0u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             type_:
-                                                                 match _d.read_struct_field("type",
-                                                                                            1u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             x:
-                                                                 match _d.read_struct_field("x",
-                                                                                            2u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             y:
-                                                                 match _d.read_struct_field("y",
-                                                                                            3u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             scaleX:
-                                                                 match _d.read_struct_field("scaleX",
-                                                                                            4u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             scaleY:
-                                                                 match _d.read_struct_field("scaleY",
-                                                                                            5u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             rotation:
-                                                                 match _d.read_struct_field("rotation",
-                                                                                            6u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             width:
-                                                                 match _d.read_struct_field("width",
-                                                                                            7u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             height:
-                                                                 match _d.read_struct_field("height",
-                                                                                            8u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             fps:
-                                                                 match _d.read_struct_field("fps",
-                                                                                            9u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },
-                                                             mode:
-                                                                 match _d.read_struct_field("mode",
-                                                                                            10u,
-                                                                                            ref
-                                                                                                |_d|
-                                                                                                ::serialize::Decodable::decode(_d))
-                                                                     {
-                                                                     Ok(__try_var)
-                                                                     =>
-                                                                     __try_var,
-                                                                     Err(__try_var)
-                                                                     =>
-                                                                     return Err(__try_var),
-                                                                 },}))
+#[deriving(Show, Clone)]
+pub enum AttachmentType {
+    Region,
+    RegionSequence,
+    BoundingBox,
+}
+
+impl from_json::FromJson for AttachmentType {
+    fn from_json(input: &serialize::json::Json) -> Result<AttachmentType, from_json::FromJsonError> {
+        use from_json::FromJson;
+
+        let string: String = try!(FromJson::from_json(input));
+
+        match string.as_slice() {
+            "region" => Ok(Region),
+            "regionsequence" => Ok(RegionSequence),
+            "boundingbox" => Ok(BoundingBox),
+            _ => Err(from_json::ExpectError("AttachmentType", input.clone()))
+        }
     }
 }
 
-#[deriving(Decodable, Show, Clone)]
-#[allow(non_camel_case_types)]
-pub enum AttachmentType {
-    region,
-    regionsequence,
-    boundingbox,
-}
-
 #[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct Event {
     pub name: String,
+    #[from_json_name = "int"]
     pub int_: Option<int>,
+    #[from_json_name = "float"]
     pub float_: Option<f64>,
     pub string: Option<String>,
 }
 
-#[automatically_derived]
-impl <__D: ::serialize::Decoder<__E>, __E>
-     ::serialize::Decodable<__D, __E> for Event {
-    fn decode(__arg_0: &mut __D) -> ::std::result::Result<Event, __E> {
-        __arg_0.read_struct("Event", 4u,
-                            ref |_d|
-                                ::std::result::Ok(Event{name:
-                                                            match _d.read_struct_field("name",
-                                                                                       0u,
-                                                                                       ref
-                                                                                           |_d|
-                                                                                           ::serialize::Decodable::decode(_d))
-                                                                {
-                                                                Ok(__try_var)
-                                                                =>
-                                                                __try_var,
-                                                                Err(__try_var)
-                                                                =>
-                                                                return Err(__try_var),
-                                                            },
-                                                        int_:
-                                                            match _d.read_struct_field("int",
-                                                                                       1u,
-                                                                                       ref
-                                                                                           |_d|
-                                                                                           ::serialize::Decodable::decode(_d))
-                                                                {
-                                                                Ok(__try_var)
-                                                                =>
-                                                                __try_var,
-                                                                Err(__try_var)
-                                                                =>
-                                                                return Err(__try_var),
-                                                            },
-                                                        float_:
-                                                            match _d.read_struct_field("float",
-                                                                                       2u,
-                                                                                       ref
-                                                                                           |_d|
-                                                                                           ::serialize::Decodable::decode(_d))
-                                                                {
-                                                                Ok(__try_var)
-                                                                =>
-                                                                __try_var,
-                                                                Err(__try_var)
-                                                                =>
-                                                                return Err(__try_var),
-                                                            },
-                                                        string:
-                                                            match _d.read_struct_field("string",
-                                                                                       3u,
-                                                                                       ref
-                                                                                           |_d|
-                                                                                           ::serialize::Decodable::decode(_d))
-                                                                {
-                                                                Ok(__try_var)
-                                                                =>
-                                                                __try_var,
-                                                                Err(__try_var)
-                                                                =>
-                                                                return Err(__try_var),
-                                                            },}))
-    }
-}
-
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct Animation {
-    pub bones: HashMap<String, BoneTimeline>,
-    pub slots: HashMap<String, SlotTimeline>,
+    pub bones: Option<HashMap<String, BoneTimeline>>,
+    pub slots: Option<HashMap<String, SlotTimeline>>,
     pub events: Option<Vec<EventKeyframe>>,
     pub draworder: Option<Vec<DrawOrderTimeline>>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct BoneTimeline {
-    pub translate: Option<BoneTranslateTimeline>,
-    pub rotate: Option<BoneRotateTimeline>,
-    pub scale: Option<BoneScaleTimeline>,
+    pub translate: Option<Vec<BoneTranslateTimeline>>,
+    pub rotate: Option<Vec<BoneRotateTimeline>>,
+    pub scale: Option<Vec<BoneScaleTimeline>>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct BoneTranslateTimeline {
     pub time: f64,
-    pub curve: Option<Vec<f64>>,
+    pub curve: Option<TimelineCurve>,
     pub x: Option<f64>,
     pub y: Option<f64>,
     pub angle: Option<f64>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct BoneRotateTimeline {
     pub time: f64,
-    pub curve: Option<Vec<f64>>,
+    pub curve: Option<TimelineCurve>,
     pub angle: Option<f64>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct BoneScaleTimeline {
     pub time: f64,
-    pub curve: Option<Vec<f64>>,
+    pub curve: Option<TimelineCurve>,
     pub x: Option<f64>,
     pub y: Option<f64>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+pub enum TimelineCurve {
+    CurveBezier(Vec<f64>),
+    CurvePredefined(String),
+}
+
+impl from_json::FromJson for TimelineCurve {
+    fn from_json(input: &serialize::json::Json) -> Result<TimelineCurve, from_json::FromJsonError> {
+        use from_json::FromJson;
+
+        if input.is_list() {
+            Ok(CurveBezier(try!(FromJson::from_json(input))))
+        } else {
+            Ok(CurvePredefined(try!(FromJson::from_json(input))))
+        }
+    }
+}
+
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct SlotTimeline {
     pub attachment: Option<SlotAttachmentTimeline>,
     pub color: Option<SlotColorTimeline>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct SlotAttachmentTimeline {
     pub time: f64,
     pub name: Option<String>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct SlotColorTimeline {
     pub time: f64,
     pub color: Option<String>,
-    pub curve: Option<Vec<f64>>,
+    pub curve: Option<TimelineCurve>,
 }
 
 #[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct EventKeyframe {
     time: f64,
     name: String,
+    #[from_json_name = "int"]
     int_: Option<int>,
+    #[from_json_name = "float"]
     float_: Option<f64>,
+    #[from_json_name = "string"]
     string_: Option<String>,
 }
 
-#[automatically_derived]
-impl <__D: ::serialize::Decoder<__E>, __E>
-     ::serialize::Decodable<__D, __E> for EventKeyframe {
-    fn decode(__arg_0: &mut __D) ->
-     ::std::result::Result<EventKeyframe, __E> {
-        __arg_0.read_struct("EventKeyframe", 5u,
-                            ref |_d|
-                                ::std::result::Ok(EventKeyframe{time:
-                                                                    match _d.read_struct_field("time",
-                                                                                               0u,
-                                                                                               ref
-                                                                                                   |_d|
-                                                                                                   ::serialize::Decodable::decode(_d))
-                                                                        {
-                                                                        Ok(__try_var)
-                                                                        =>
-                                                                        __try_var,
-                                                                        Err(__try_var)
-                                                                        =>
-                                                                        return Err(__try_var),
-                                                                    },
-                                                                name:
-                                                                    match _d.read_struct_field("name",
-                                                                                               1u,
-                                                                                               ref
-                                                                                                   |_d|
-                                                                                                   ::serialize::Decodable::decode(_d))
-                                                                        {
-                                                                        Ok(__try_var)
-                                                                        =>
-                                                                        __try_var,
-                                                                        Err(__try_var)
-                                                                        =>
-                                                                        return Err(__try_var),
-                                                                    },
-                                                                int_:
-                                                                    match _d.read_struct_field("int",
-                                                                                               2u,
-                                                                                               ref
-                                                                                                   |_d|
-                                                                                                   ::serialize::Decodable::decode(_d))
-                                                                        {
-                                                                        Ok(__try_var)
-                                                                        =>
-                                                                        __try_var,
-                                                                        Err(__try_var)
-                                                                        =>
-                                                                        return Err(__try_var),
-                                                                    },
-                                                                float_:
-                                                                    match _d.read_struct_field("float",
-                                                                                               3u,
-                                                                                               ref
-                                                                                                   |_d|
-                                                                                                   ::serialize::Decodable::decode(_d))
-                                                                        {
-                                                                        Ok(__try_var)
-                                                                        =>
-                                                                        __try_var,
-                                                                        Err(__try_var)
-                                                                        =>
-                                                                        return Err(__try_var),
-                                                                    },
-                                                                string_:
-                                                                    match _d.read_struct_field("string",
-                                                                                               4u,
-                                                                                               ref
-                                                                                                   |_d|
-                                                                                                   ::serialize::Decodable::decode(_d))
-                                                                        {
-                                                                        Ok(__try_var)
-                                                                        =>
-                                                                        __try_var,
-                                                                        Err(__try_var)
-                                                                        =>
-                                                                        return Err(__try_var),
-                                                                    },}))
-    }
-}
-
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct DrawOrderTimeline {
     time: f64,
     offsets: Option<Vec<DrawOrderTimelineOffset>>,
 }
 
-#[deriving(Decodable, Show, Clone)]
+#[deriving(Show, Clone)]
+#[from_json_struct]
 pub struct DrawOrderTimelineOffset {
     slot: String,
     offset: int,

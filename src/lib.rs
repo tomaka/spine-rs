@@ -1,4 +1,10 @@
+#![feature(phase)]
+
+#[phase(plugin)]
+extern crate from_json_macros;
+
 extern crate cgmath;
+extern crate from_json;
 extern crate serialize;
 
 use cgmath::{Matrix4};
@@ -12,10 +18,8 @@ pub struct SpineDocument {
 
 impl SpineDocument {
     pub fn new<R: Reader>(reader: &mut R) -> Result<SpineDocument, String> {
-
         let document = try!(json::from_reader(reader).map_err(|e| e.to_string()));
-        let mut decoder = json::Decoder::new(document);
-        let document = try!(serialize::Decodable::decode(&mut decoder).map_err(|e| e.to_string()));
+        let document: format::Document = from_json::FromJson::from_json(&document).unwrap();
 
         Ok(SpineDocument {
             source: document
