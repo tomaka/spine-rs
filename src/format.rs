@@ -151,8 +151,8 @@ impl from_json::FromJson for TimelineCurve {
 #[deriving(Show, Clone)]
 #[from_json_struct]
 pub struct SlotTimeline {
-    pub attachment: Option<SlotAttachmentTimeline>,
-    pub color: Option<SlotColorTimeline>,
+    pub attachment: Option<Vec<SlotAttachmentTimeline>>,
+    pub color: Option<Vec<SlotColorTimeline>>,
 }
 
 #[deriving(Show, Clone)]
