@@ -25,7 +25,8 @@ impl SpineDocument {
     /// Loads a document from a reader.
     pub fn new<R: Reader>(reader: &mut R) -> Result<SpineDocument, String> {
         let document = try!(json::from_reader(reader).map_err(|e| e.to_string()));
-        let document: format::Document = from_json::FromJson::from_json(&document).unwrap();
+        let document: format::Document = try!(from_json::FromJson::from_json(&document)
+            .map_err(|e| e.to_string()));
 
         Ok(SpineDocument {
             source: document
@@ -151,7 +152,7 @@ impl SpineDocument {
     // TODO: implement events
     // TODO: implement other attachment types
     pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32) 
-        -> Result<Calculation, ()>
+        -> Result<Calculation, CalculationError>
     {
         // adapting elapsed
         if let Some(animation) = animation {
@@ -162,12 +163,13 @@ impl SpineDocument {
         let elapsed = elapsed;
 
         // getting a reference to the `format::Skin`
-        let skin = try!(self.source.skins.as_ref().and_then(|l| l.find_equiv(&skin)).ok_or(()));
+        let skin = try!(self.source.skins.as_ref().and_then(|l| l.find_equiv(&skin))
+            .ok_or(SkinNotFound));
 
         // getting a reference to the `format::Animation`
         let animation: Option<&format::Animation> = match animation {
             Some(animation) => Some(try!(self.source.animations.as_ref()
-                .and_then(|l| l.find_equiv(&animation)).ok_or(()))),
+                .and_then(|l| l.find_equiv(&animation)).ok_or(AnimationNotFound))),
             None => None
         };
 
@@ -208,7 +210,7 @@ impl SpineDocument {
                             current_matrix = p.1.to_matrix() * current_matrix;
                         },
                         None => {
-                            current_parent = None       // TODO: return error instead
+                            current_parent = None;  // TODO: return BoneNotFound(parent_name);
                         }
                     }
 
@@ -229,7 +231,7 @@ impl SpineDocument {
 
                 for slot in slots.iter() {
                     let bone = try!(bones.iter().find(|&&(name, _)| name == slot.bone.as_slice())
-                        .ok_or(()));
+                        .ok_or(BoneNotFound(slot.bone.as_slice())));
                     result.push((slot.name.as_slice(), bone.1, slot.color.as_ref()
                         .map(|s| s.as_slice()), slot.attachment.as_ref().map(|s| s.as_slice())))
                 }
@@ -265,19 +267,23 @@ impl SpineDocument {
             let mut results = Vec::new();
 
             for (slot_name, bone_data, color, attachment) in slots.into_iter() {
-                let attachments = try!(skin.iter().find(|&(slot, _)| slot.as_slice() == slot_name)
-                    .ok_or(()));
-                let attachment = try!(attachments.1.iter()
-                    .find(|&(a, _)| Some(a.as_slice()) == attachment).ok_or(()));
+                if let Some(attachment) = attachment {
+                    let attachments = try!(skin.iter().find(|&(slot, _)| slot.as_slice() == slot_name)
+                        .ok_or(SlotNotFound(slot_name)));
 
-                let attachment_transform = get_attachment_transformation(attachment.1);
-                let bone_data = (bone_data * attachment_transform);
+                    let attachment = try!(attachments.1.iter()
+                        .find(|&(a, _)| a.as_slice() == attachment)
+                        .ok_or(AttachmentNotFound(attachment)));
 
-                results.push((
-                    attachment.0.as_slice(),
-                    bone_data,
-                    Rgba { a: 255, c: Rgb::new(255, 255, 255) }
-                ));
+                    let attachment_transform = get_attachment_transformation(attachment.1);
+                    let bone_data = (bone_data * attachment_transform);
+
+                    results.push((
+                        attachment.0.as_slice(),
+                        bone_data,
+                        Rgba { a: 255, c: Rgb::new(255, 255, 255) }
+                    ));
+                }
             }
 
             results
@@ -300,6 +306,34 @@ pub struct Calculation<'a> {
     /// The matrix assumes that the sprite is displayed from (-1, -1) to (1, 1), ie. would cover
     ///  the whole screen.
     pub sprites: Vec<(&'a str, Matrix4<f32>, Rgba<u8>)>,
+}
+
+/// Error that can happen while calculating an animation.
+#[deriving(Clone, Show, PartialEq, Eq)]
+pub enum CalculationError<'a> {
+    /// The requested skin was not found.
+    SkinNotFound,
+
+    /// The requested animation was not found.
+    AnimationNotFound,
+
+    /// The requested bone was not found in the list of bones.
+    ///
+    /// This probably means that the Spine document contains an error.
+    BoneNotFound(&'a str),
+
+    /// The requested slot was not found.
+    ///
+    /// This probably means that the Spine document contains an error.
+    SlotNotFound(&'a str),
+
+    /// The requested attachment was not found.
+    ///
+    /// This probably means that the Spine document contains an error.
+    AttachmentNotFound(&'a str),
+
+    /// The curve function was not recognized.
+    UnknownCurveFunction(String),
 }
 
 /// Informations about a bone's position.
@@ -359,7 +393,7 @@ fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32
 }
 
 /// Builds the `Matrix4` corresponding to a timeline.
-fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<BoneData, ()> {
+fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<BoneData, CalculationError> {
     // calculating the current position
     let position = if let Some(timeline) = timeline.translate.as_ref() {
         // finding in which interval we are
@@ -458,7 +492,7 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 /// Position must be between 0 and 1
 // TODO: not implemented correctly
 fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
-    position: f32) -> Result<f32, ()>
+    position: f32) -> Result<f32, CalculationError>
 {
     let bezier = match formula {
         &None =>
@@ -468,14 +502,14 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
         &Some(format::CurvePredefined(ref a)) if a.as_slice() == "stepped" =>
             return Ok(from),
         &Some(format::CurveBezier(ref a)) => a.as_slice(),
-        _ => return Err(()),
+        a => return Err(UnknownCurveFunction(a.to_string())),
     };
     
     let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
                                       bezier.get(2), bezier.get(3))
     {
         (Some(cx1), Some(cy1), Some(cx2), Some(cy2)) => (cx1, cy1, cx2, cy2),
-        _ => return Err(())
+        a => return Err(UnknownCurveFunction(a.to_string()))
     };
 
     Ok(from + position * (to - from))
@@ -483,7 +517,7 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
 
 /// Builds the color and attachment corresponding to a slot timeline.
 fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
-    -> Result<(Option<&str>, Option<&str>), ()>
+    -> Result<(Option<&str>, Option<&str>), CalculationError>
 {
     // calculating the attachment
     let attachment = if let Some(timeline) = timeline.attachment.as_ref() {
