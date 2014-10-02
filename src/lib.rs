@@ -562,12 +562,14 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
     })
 }
 
+/// Calculates a curve using the value of a "curve" member.
 ///
 /// Position must be between 0 and 1
-// TODO: not implemented correctly
 fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
     position: f32) -> Result<f32, CalculationError>
 {
+    assert!(position >= 0.0 && position <= 1.0);
+
     let bezier = match formula {
         &None =>
             return Ok(from + position * (to - from)),
@@ -579,17 +581,37 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
         a => return Err(UnknownCurveFunction(a.to_string())),
     };
     
-    let (_cx1, _cy1, _cx2, _cy2) = match (bezier.get(0), bezier.get(1),
+    let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
                                       bezier.get(2), bezier.get(3))
     {
-        (Some(cx1), Some(cy1), Some(cx2), Some(cy2)) => (cx1, cy1, cx2, cy2),
-        a => return Err(UnknownCurveFunction(a.to_string()))
+        (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
+            (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
+        a =>
+            return Err(UnknownCurveFunction(a.to_string()))
     };
 
-    // TODO: finish implementation
+    let factor = std::iter::count(0.0, 0.02)
+        .take_while(|v| *v <= 1.0)
+        .map(|t| {
+            let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
+                + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
+            let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
+                + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
 
-    // TODO: this is a stub
-    Ok(from + position * (to - from))
+            (x, y)
+        })
+        .scan((0.0, 0.0), |previous, current| {
+            let result = Some((previous.clone(), current));
+            *previous = current;
+            result
+        })
+        .find(|&(previous, current)| {
+            position >= previous.0 && position < current.0
+        })
+        .map(|((_, val), _)| val)
+        .unwrap_or(1.0);
+
+    Ok(from + factor * (to - from))
 }
 
 /// Builds the color and attachment corresponding to a slot timeline.
