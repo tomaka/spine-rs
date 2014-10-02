@@ -302,41 +302,50 @@ pub struct Calculation<'a> {
     pub sprites: Vec<(&'a str, Matrix4<f32>, Rgba<u8>)>,
 }
 
-/// Creates a matrix from a position, rotation, and scale.
+/// Informations about a bone's position.
 ///
-/// The matrix is pre-multiplying.
-fn to_matrix(position: (f32, f32), rotation: f32, scale: (f32, f32)) -> Matrix4<f32> {
-    use cgmath::{Matrix2, Vector3, ToMatrix4, ToRad};
-    use std::num::FloatMath;
+/// Can be absolute or relative to its parent.
+#[deriving(Show, Clone)]
+struct BoneData {
+    position: (f32, f32),
+    rotation: f32,
+    scale: (f32, f32),
+}
 
-    let scale_matrix = Matrix4::new(scale.0, 0.0, 0.0, 0.0, 0.0, scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+impl BoneData {
+    fn to_matrix(&self) -> Matrix4<f32> {
+        use cgmath::{Matrix2, Vector3, ToMatrix4, ToRad};
+        use std::num::FloatMath;
 
-    let rotation_matrix = Matrix2::from_angle(cgmath::deg(rotation).to_rad()).to_matrix4();
+        let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0, 0.0, self.scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
 
-    let translation_matrix = Matrix4::from_translation(&Vector3::new(position.0, position.1, 0.0));
+        let rotation_matrix = Matrix2::from_angle(cgmath::deg(self.rotation).to_rad()).to_matrix4();
 
-    translation_matrix * rotation_matrix * scale_matrix
+        let translation_matrix = Matrix4::from_translation(&Vector3::new(self.position.0, self.position.1, 0.0));
+
+        translation_matrix * rotation_matrix * scale_matrix
+    }
 }
 
 /// Returns the setup pose of a bone relative to its parent.
 fn get_bone_default_local_setup(bone: &format::Bone) -> Matrix4<f32> {
-    to_matrix(
-        (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
-        bone.rotation.unwrap_or(0.0) as f32,
-        (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32)
-    )
+    BoneData {
+        position: (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
+        rotation: bone.rotation.unwrap_or(0.0) as f32,
+        scale: (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32),
+    }.to_matrix()
 }
 
 /// Returns the `Matrix` of an attachment.
 fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32> {
-    to_matrix(
-        (attachment.x.unwrap_or(0.0) as f32, attachment.y.unwrap_or(0.0) as f32),
-        attachment.rotation.unwrap_or(0.0) as f32,
-        (
+    BoneData {
+        position: (attachment.x.unwrap_or(0.0) as f32, attachment.y.unwrap_or(0.0) as f32),
+        rotation: attachment.rotation.unwrap_or(0.0) as f32,
+        scale: (
             attachment.scaleX.unwrap_or(1.0) as f32 * attachment.width.unwrap_or(1.0) as f32 / 2.0,
             attachment.scaleY.unwrap_or(1.0) as f32 * attachment.height.unwrap_or(1.0) as f32 / 2.0
-        )
-    )
+        ),
+    }.to_matrix()
 }
 
 /// Builds the `Matrix4` corresponding to a timeline.
@@ -428,7 +437,11 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 
     
     // returning
-    Ok(to_matrix(position, rotation, scale))
+    Ok(BoneData {
+        position: position,
+        rotation: rotation,
+        scale: scale,
+    }.to_matrix())
 }
 
 ///
