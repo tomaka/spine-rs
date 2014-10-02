@@ -1,6 +1,81 @@
+/*!
+# spine
+
+Parses a Spine document and calculates what needs to be drawn.
+
+## Step 1: loading the document
+
+Call `SpineDocument::new` to parse the content of a document.
+
+This function returns an `Err` if the document is not valid JSON or if something is not
+ recognized in it.
+
+```no_run
+# use std::io::fs::File;
+let document = spine::SpineDocument::new(File::open(&Path::new("skeleton.json")).unwrap())
+    .unwrap();
+```
+
+## Step 2: preparing for drawing
+
+You can retreive the list of animations and skins provided a document:
+
+```no_run
+# let document: spine::SpineDocument = unsafe { std::mem::uninitialized() };
+let skins = document.get_skins_list();
+
+let animations = document.get_animations_list();
+let first_animation_duration = document.get_animation_duration(animations[0]).unwrap();
+```
+
+You can also get a list of the names of all the sprites that can possibly be drawn by this
+ Spine animation.
+
+```no_run
+# let document: spine::SpineDocument = unsafe { std::mem::uninitialized() };
+let sprites = document.get_possible_sprites();
+```
+
+Note that the names do not necessarly match file names. They are the same names that you have in
+ the Spine editor. It is your job to turn these resource names into file names if necessary.
+
+## Step 3: animating
+
+At each frame, call `document.calculate()` in order to get the list of things that need to be
+ drawn for the current animation.
+
+This function takes the skin name, the animation name (or `None` for the default pose) and the
+ time in the current animation's loop.
+
+```no_run
+# let document: spine::SpineDocument = unsafe { std::mem::uninitialized() };
+let results = document.calculate("default", Some("walk"), 0.176).unwrap();
+```
+
+The results contain the list of sprites that need to be drawn, with their matrix. The matrix
+ supposes that each sprite would cover the whole viewport (ie. drawn from `(-1, -1)` to
+ `(1, 1)`). The matrix is pre-multiplying ; if you want to apply your own matrix `C` over
+ the one returned, you need to call `C * M`.
+
+```no_run
+# use std::collections::HashMap;
+# let results: spine::Calculation = unsafe { std::mem::uninitialized() };
+# let textures_list: HashMap<&str, int> = unsafe { std::mem::uninitialized() };
+# fn draw<A,B,C>(_: A, _: B, _: C) {}
+for (sprite_name, matrix, color) in results.sprites.into_iter() {
+    let texture = textures_list.find(&sprite_name).unwrap();
+    draw(texture, matrix, color);
+}
+```
+
+*/
+
 #![feature(if_let)]
 #![feature(phase)]
 #![feature(tuple_indexing)]
+
+#![deny(missing_doc)]
+#![deny(warnings)]
 
 #[phase(plugin)]
 extern crate from_json_macros;
@@ -23,8 +98,8 @@ pub struct SpineDocument {
 
 impl SpineDocument {
     /// Loads a document from a reader.
-    pub fn new<R: Reader>(reader: &mut R) -> Result<SpineDocument, String> {
-        let document = try!(json::from_reader(reader).map_err(|e| e.to_string()));
+    pub fn new<R: Reader>(mut reader: R) -> Result<SpineDocument, String> {
+        let document = try!(json::from_reader(&mut reader).map_err(|e| e.to_string()));
         let document: format::Document = try!(from_json::FromJson::from_json(&document)
             .map_err(|e| e.to_string()));
 
@@ -148,6 +223,8 @@ impl SpineDocument {
     }
 
     /// Calculates the list of sprites that must be displayed and their matrix.
+    ///
+    /// If `elapsed` is longer than the duration of the animation, it will be modulo'd.
     // TODO: implement draw order timeline
     // TODO: implement events
     // TODO: implement other attachment types
@@ -266,7 +343,7 @@ impl SpineDocument {
         let slots = {
             let mut results = Vec::new();
 
-            for (slot_name, bone_data, color, attachment) in slots.into_iter() {
+            for (slot_name, bone_data, _color, attachment) in slots.into_iter() {
                 if let Some(attachment) = attachment {
                     let attachments = try!(skin.iter().find(|&(slot, _)| slot.as_slice() == slot_name)
                         .ok_or(SlotNotFound(slot_name)));
@@ -276,7 +353,7 @@ impl SpineDocument {
                         .ok_or(AttachmentNotFound(attachment)));
 
                     let attachment_transform = get_attachment_transformation(attachment.1);
-                    let bone_data = (bone_data * attachment_transform);
+                    let bone_data = bone_data * attachment_transform;
 
                     results.push((
                         attachment.0.as_slice(),
@@ -349,12 +426,9 @@ struct BoneData {
 impl BoneData {
     fn to_matrix(&self) -> Matrix4<f32> {
         use cgmath::{Matrix2, Vector3, ToMatrix4, ToRad};
-        use std::num::FloatMath;
 
         let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0, 0.0, self.scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-
         let rotation_matrix = Matrix2::from_angle(cgmath::deg(self.rotation).to_rad()).to_matrix4();
-
         let translation_matrix = Matrix4::from_translation(&Vector3::new(self.position.0, self.position.1, 0.0));
 
         translation_matrix * rotation_matrix * scale_matrix
@@ -505,13 +579,16 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
         a => return Err(UnknownCurveFunction(a.to_string())),
     };
     
-    let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
+    let (_cx1, _cy1, _cx2, _cy2) = match (bezier.get(0), bezier.get(1),
                                       bezier.get(2), bezier.get(3))
     {
         (Some(cx1), Some(cy1), Some(cx2), Some(cy2)) => (cx1, cy1, cx2, cy2),
         a => return Err(UnknownCurveFunction(a.to_string()))
     };
 
+    // TODO: finish implementation
+
+    // TODO: this is a stub
     Ok(from + position * (to - from))
 }
 
@@ -525,7 +602,7 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
         match timeline.iter().zip(timeline.iter().skip(1))
             .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
         {
-            Some((ref before, ref after)) => {
+            Some((ref before, _)) => {
                 before.name.as_ref().map(|e| e.as_slice())
             },
             None => {
@@ -546,7 +623,7 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
         match timeline.iter().zip(timeline.iter().skip(1))
             .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
         {
-            Some((ref before, ref after)) => {
+            Some((ref before, _)) => {
                 before.color.as_ref().map(|e| e.as_slice())
             },
             None => {
@@ -563,9 +640,4 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
     
     // returning
     Ok((color, attachment))
-}
-
-/// Parses a color from a string.
-fn parse_color(input: &str) -> Result<Rgba<u8>, ()> {
-    unimplemented!()
 }
