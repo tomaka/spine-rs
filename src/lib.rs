@@ -95,7 +95,6 @@ impl SpineDocument {
     }
 
     /// Calculates the list of sprites that must be displayed and their matrix.
-    // TODO: implement attachment and colors timeline
     // TODO: implement draw order timeline
     // TODO: implement events
     // TODO: implement other attachment types
@@ -159,7 +158,7 @@ impl SpineDocument {
 
         // now taking each slot in the document and matching its bone
         // `slots` contains the slot name, bone data, color, and attachment
-        let slots: Vec<(&str, Matrix4<f32>, Option<&str>, Option<&str>)> =
+        let mut slots: Vec<(&str, Matrix4<f32>, Option<&str>, Option<&str>)> =
             if let Some(slots) = self.source.slots.as_ref() {
                 let mut result = Vec::new();
 
@@ -176,7 +175,25 @@ impl SpineDocument {
                 Vec::new()
             };
 
-        // TODO: implements slots timeline here
+        // if we are animating, replacing the values by the ones overridden by the animation
+        if let Some(animation) = animation {
+            if let Some(anim_slots) = animation.slots.as_ref() {
+                for (slot_name, timelines) in anim_slots.iter() {
+                    // calculating the variation from the animation
+                    let (anim_color, anim_attach) =
+                        try!(timelines_to_slotdata(timelines, elapsed));
+
+                    // adding this to the `slots` vec above
+                    match slots.iter_mut().find(|&&(s, _, _, _)| s == slot_name.as_slice()) {
+                        Some(&(_, _, ref mut color, ref mut attachment)) => {
+                            if let Some(c) = anim_color { *color = Some(c) };
+                            if let Some(a) = anim_attach { *attachment = Some(a) };
+                        },
+                        None => ()
+                    };
+                }
+            }
+        };
 
         // now finding the attachment of each slot
         let slots = {
@@ -368,7 +385,75 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
     position: f32) -> Result<f32, ()>
 {
+    let bezier = match formula {
+        &None =>
+            return Ok(from + position * (to - from)),
+        &Some(format::CurvePredefined(ref a)) if a.as_slice() == "linear" =>
+            return Ok(from + position * (to - from)),
+        &Some(format::CurvePredefined(ref a)) if a.as_slice() == "stepped" =>
+            return Ok(from),
+        &Some(format::CurveBezier(ref a)) => a.as_slice(),
+        _ => return Err(()),
+    };
+    
+    let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
+                                      bezier.get(2), bezier.get(3))
+    {
+        (Some(cx1), Some(cy1), Some(cx2), Some(cy2)) => (cx1, cy1, cx2, cy2),
+        _ => return Err(())
+    };
+
     Ok(from + position * (to - from))
+}
+
+/// Builds the color and attachment corresponding to a slot timeline.
+fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
+    -> Result<(Option<&str>, Option<&str>), ()>
+{
+    // calculating the attachment
+    let attachment = if let Some(timeline) = timeline.attachment.as_ref() {
+        // finding in which interval we are
+        match timeline.iter().zip(timeline.iter().skip(1))
+            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
+        {
+            Some((ref before, ref after)) => {
+                before.name.as_ref().map(|e| e.as_slice())
+            },
+            None => {
+                // we didn't find an interval, assuming we are past the end
+                timeline.last().and_then(|t| (t.name.as_ref().map(|e| e.as_slice())))
+            }
+        }
+
+    } else {
+        // we have no timeline
+        None
+    };
+
+
+    // calculating the color
+    let color = if let Some(timeline) = timeline.color.as_ref() {
+        // finding in which interval we are
+        match timeline.iter().zip(timeline.iter().skip(1))
+            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
+        {
+            Some((ref before, ref after)) => {
+                before.color.as_ref().map(|e| e.as_slice())
+            },
+            None => {
+                // we didn't find an interval, assuming we are past the end
+                timeline.last().and_then(|t| (t.color.as_ref().map(|e| e.as_slice())))
+            }
+        }
+
+    } else {
+        // we have no timeline
+        None
+    };
+
+    
+    // returning
+    Ok((color, attachment))
 }
 
 /// Parses a color from a string.
