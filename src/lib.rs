@@ -72,9 +72,61 @@ impl SpineDocument {
     ///
     /// Returns `None` if the animation doesn't exist.
     /// 
-    /// TODO: implement
+    /// TODO: check events and draworder?
     pub fn get_animation_duration(&self, animation: &str) -> Option<f32> {
-        Some(1.0)
+        // getting a reference to the `format::Animation`
+        let animation: &format::Animation = 
+            if let Some(anim) = self.source.animations.as_ref() {
+                match anim.find_equiv(&animation) {
+                    Some(a) => a,
+                    None => return None
+                }
+            } else {
+                return None;
+            };
+
+        // this contains the final result
+        let mut result = 0.0f64;
+
+        // checking the bones
+        if let Some(ref bones) = animation.bones {
+            for timelines in bones.values() {
+                if let Some(ref translate) = timelines.translate.as_ref() {
+                    for elem in translate.iter() {
+                        if elem.time > result { result = elem.time }
+                    }
+                }
+                if let Some(ref rotate) = timelines.rotate.as_ref() {
+                    for elem in rotate.iter() {
+                        if elem.time > result { result = elem.time }
+                    }
+                }
+                if let Some(ref scale) = timelines.scale.as_ref() {
+                    for elem in scale.iter() {
+                        if elem.time > result { result = elem.time }
+                    }
+                }
+            }
+        }
+
+        // checking the slots
+        if let Some(ref slots) = animation.slots {
+            for timelines in slots.values() {
+                if let Some(ref attachment) = timelines.attachment.as_ref() {
+                    for elem in attachment.iter() {
+                        if elem.time > result { result = elem.time }
+                    }
+                }
+                if let Some(ref color) = timelines.color.as_ref() {
+                    for elem in color.iter() {
+                        if elem.time > result { result = elem.time }
+                    }
+                }
+            }
+        }
+
+        // returning
+        Some(result as f32)
     }
 
     /// Returns a list of all possible sprites when drawing.
