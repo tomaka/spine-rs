@@ -172,7 +172,7 @@ impl SpineDocument {
         };
 
         // calculating the default pose of all bones
-        let mut bones: Vec<(&format::Bone, Matrix4<f32>)> = self.source.bones.as_ref().map(|bones| {
+        let mut bones: Vec<(&format::Bone, BoneData)> = self.source.bones.as_ref().map(|bones| {
             bones.iter().map(|bone| (bone, get_bone_default_local_setup(bone))).collect()
         }).unwrap_or_else(|| Vec::new());
 
@@ -185,7 +185,7 @@ impl SpineDocument {
 
                     // adding this to the `bones` vec above
                     match bones.iter_mut().find(|&&(b, _)| b.name == *bone_name) {
-                        Some(&(_, ref mut data)) => { *data = *data * anim_data; },
+                        Some(&(_, ref mut data)) => { *data = *data + anim_data; },
                         None => ()
                     };
                 }
@@ -195,7 +195,7 @@ impl SpineDocument {
         // now we have our list of bones with their relative positions
         // adding the position of the parent to each bone
         let bones: Vec<(&str, Matrix4<f32>)> = bones.iter().map(|&(ref bone, ref relative_data)| {
-            let mut current_matrix = relative_data.clone();
+            let mut current_matrix = relative_data.to_matrix();
             let mut current_parent = bone.parent.as_ref();
 
             loop {
@@ -205,7 +205,7 @@ impl SpineDocument {
                     match bones.iter().find(|&&(b, _)| b.name == *parent_name) {
                         Some(ref p) => {
                             current_parent = p.0.parent.as_ref();
-                            current_matrix = p.1 * current_matrix;
+                            current_matrix = p.1.to_matrix() * current_matrix;
                         },
                         None => {
                             current_parent = None       // TODO: return error instead
@@ -327,13 +327,23 @@ impl BoneData {
     }
 }
 
+impl Add<BoneData, BoneData> for BoneData {
+    fn add(&self, rhs: &BoneData) -> BoneData {
+        BoneData {
+            position: (self.position.0 + rhs.position.0, self.position.1 + rhs.position.1),
+            rotation: self.rotation + rhs.rotation,
+            scale: (self.scale.0 * rhs.scale.0, self.scale.1 * rhs.scale.1),
+        }
+    }
+}
+
 /// Returns the setup pose of a bone relative to its parent.
-fn get_bone_default_local_setup(bone: &format::Bone) -> Matrix4<f32> {
+fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
     BoneData {
         position: (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
         rotation: bone.rotation.unwrap_or(0.0) as f32,
         scale: (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32),
-    }.to_matrix()
+    }
 }
 
 /// Returns the `Matrix` of an attachment.
@@ -349,7 +359,7 @@ fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32
 }
 
 /// Builds the `Matrix4` corresponding to a timeline.
-fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<Matrix4<f32>, ()> {
+fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<BoneData, ()> {
     // calculating the current position
     let position = if let Some(timeline) = timeline.translate.as_ref() {
         // finding in which interval we are
@@ -441,7 +451,7 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
         position: position,
         rotation: rotation,
         scale: scale,
-    }.to_matrix())
+    })
 }
 
 ///
