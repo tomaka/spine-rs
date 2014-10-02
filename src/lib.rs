@@ -143,17 +143,30 @@ impl SpineDocument {
         // now we have our list of bones with their relative positions
         // adding the position of the parent to each bone
         let bones: Vec<(&str, Matrix4<f32>)> = bones.iter().map(|&(ref bone, ref relative_data)| {
-            assert!(bone.parent.as_ref() != Some(&bone.name));
+            let mut current_matrix = relative_data.clone();
+            let mut current_parent = bone.parent.as_ref();
 
-            if let Some(ref parent_name) = bone.parent {
-                match bones.iter().find(|&&(b, _)| b.name == *parent_name) {
-                    Some(ref p) => (bone.name.as_slice(), p.1 * *relative_data),
-                    None => (bone.name.as_slice(), relative_data.clone())       // TODO: return error instead
+            loop {
+                if let Some(parent_name) = current_parent {
+                    assert!(parent_name != &bone.name);     // prevent infinite loop
+
+                    match bones.iter().find(|&&(b, _)| b.name == *parent_name) {
+                        Some(ref p) => {
+                            current_parent = p.0.parent.as_ref();
+                            current_matrix = p.1 * current_matrix;
+                        },
+                        None => {
+                            current_parent = None       // TODO: return error instead
+                        }
+                    }
+
+                } else {
+                    break
                 }
-                
-            } else {
-                (bone.name.as_slice(), relative_data.clone())
             }
+
+            (bone.name.as_slice(), current_matrix.clone())
+
         }).collect();
 
         // now taking each slot in the document and matching its bone
