@@ -74,7 +74,7 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 #![feature(phase)]
 #![feature(tuple_indexing)]
 
-#![deny(missing_doc)]
+#![deny(missing_docs)]
 #![deny(warnings)]
 
 #[phase(plugin)]
@@ -153,7 +153,7 @@ impl SpineDocument {
         // getting a reference to the `format::Animation`
         let animation: &format::Animation = 
             if let Some(anim) = self.source.animations.as_ref() {
-                match anim.find_equiv(&animation) {
+                match anim.find_equiv(animation) {
                     Some(a) => a,
                     None => return None
                 }
@@ -240,13 +240,13 @@ impl SpineDocument {
         let elapsed = elapsed;
 
         // getting a reference to the `format::Skin`
-        let skin = try!(self.source.skins.as_ref().and_then(|l| l.find_equiv(&skin))
+        let skin = try!(self.source.skins.as_ref().and_then(|l| l.find_equiv(skin))
             .ok_or(SkinNotFound));
 
         // getting a reference to the `format::Animation`
         let animation: Option<&format::Animation> = match animation {
             Some(animation) => Some(try!(self.source.animations.as_ref()
-                .and_then(|l| l.find_equiv(&animation)).ok_or(AnimationNotFound))),
+                .and_then(|l| l.find_equiv(animation)).ok_or(AnimationNotFound))),
             None => None
         };
 
