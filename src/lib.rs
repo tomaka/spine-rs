@@ -63,7 +63,7 @@ The results contain the list of sprites that need to be drawn, with their matrix
 # let textures_list: HashMap<&str, int> = unsafe { std::mem::uninitialized() };
 # fn draw<A,B,C>(_: A, _: B, _: C) {}
 for (sprite_name, matrix, color) in results.sprites.into_iter() {
-    let texture = textures_list.find(&sprite_name).unwrap();
+    let texture = textures_list.get(&sprite_name).unwrap();
     draw(texture, matrix, color);
 }
 ```
@@ -129,7 +129,7 @@ impl SpineDocument {
     /// Returns true if an animation is in the document.
     pub fn has_animation(&self, name: &str) -> bool {
         if let Some(ref list) = self.source.animations {
-            list.find(&name.to_string()).is_some()
+            list.get(&name.to_string()).is_some()
         } else {
             false
         }
@@ -138,7 +138,7 @@ impl SpineDocument {
     /// Returns true if a skin is in the document.
     pub fn has_skin(&self, name: &str) -> bool {
         if let Some(ref list) = self.source.skins {
-            list.find(&name.to_string()).is_some()
+            list.get(&name.to_string()).is_some()
         } else {
             false
         }
