@@ -1,7 +1,14 @@
 [package]
-name = "spine"
+name = "spine_tiny"
 version = "0.0.1"
 authors = [ "pierre.krieger1708@gmail.com" ]
+description = "Simple implementation of the Spine runtime"
+license = "Apache-2.0"
+repository = "https://github.com/tomaka/spine-rs"
+
+[lib]
+name = "spine"
+path = "src/lib.rs"
 
 [dependencies.cgmath]
 git = "https://github.com/bjz/cgmath-rs"

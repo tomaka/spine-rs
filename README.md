@@ -1,8 +1,12 @@
 # spine
 
 ```toml
-[dependencies.spine]
+[dependencies.spine_tiny]
 git = "http://github.com/tomaka/spine-rs"
+```
+
+```rust
+extern crate spine;
 ```
 
 Parses a Spine document and calculates what needs to be drawn.
