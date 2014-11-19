@@ -68,9 +68,9 @@ impl from_json::FromJson for AttachmentType {
         let string: String = try!(FromJson::from_json(input));
 
         match string.as_slice() {
-            "region" => Ok(Region),
-            "regionsequence" => Ok(RegionSequence),
-            "boundingbox" => Ok(BoundingBox),
+            "region" => Ok(AttachmentType::Region),
+            "regionsequence" => Ok(AttachmentType::RegionSequence),
+            "boundingbox" => Ok(AttachmentType::BoundingBox),
             _ => Err(from_json::ExpectError("AttachmentType", input.clone()))
         }
     }
@@ -141,9 +141,9 @@ impl from_json::FromJson for TimelineCurve {
         use from_json::FromJson;
 
         if input.is_list() {
-            Ok(CurveBezier(try!(FromJson::from_json(input))))
+            Ok(TimelineCurve::CurveBezier(try!(FromJson::from_json(input))))
         } else {
-            Ok(CurvePredefined(try!(FromJson::from_json(input))))
+            Ok(TimelineCurve::CurvePredefined(try!(FromJson::from_json(input))))
         }
     }
 }

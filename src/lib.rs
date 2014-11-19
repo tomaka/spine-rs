@@ -241,12 +241,12 @@ impl SpineDocument {
 
         // getting a reference to the `format::Skin`
         let skin = try!(self.source.skins.as_ref().and_then(|l| l.find_equiv(skin))
-            .ok_or(SkinNotFound));
+            .ok_or(CalculationError::SkinNotFound));
 
         // getting a reference to the `format::Animation`
         let animation: Option<&format::Animation> = match animation {
             Some(animation) => Some(try!(self.source.animations.as_ref()
-                .and_then(|l| l.find_equiv(animation)).ok_or(AnimationNotFound))),
+                .and_then(|l| l.find_equiv(animation)).ok_or(CalculationError::AnimationNotFound))),
             None => None
         };
 
@@ -308,7 +308,7 @@ impl SpineDocument {
 
                 for slot in slots.iter() {
                     let bone = try!(bones.iter().find(|&&(name, _)| name == slot.bone.as_slice())
-                        .ok_or(BoneNotFound(slot.bone.as_slice())));
+                        .ok_or(CalculationError::BoneNotFound(slot.bone.as_slice())));
                     result.push((slot.name.as_slice(), bone.1, slot.color.as_ref()
                         .map(|s| s.as_slice()), slot.attachment.as_ref().map(|s| s.as_slice())))
                 }
@@ -346,11 +346,11 @@ impl SpineDocument {
             for (slot_name, bone_data, _color, attachment) in slots.into_iter() {
                 if let Some(attachment) = attachment {
                     let attachments = try!(skin.iter().find(|&(slot, _)| slot.as_slice() == slot_name)
-                        .ok_or(SlotNotFound(slot_name)));
+                        .ok_or(CalculationError::SlotNotFound(slot_name)));
 
                     let attachment = try!(attachments.1.iter()
                         .find(|&(a, _)| a.as_slice() == attachment)
-                        .ok_or(AttachmentNotFound(attachment)));
+                        .ok_or(CalculationError::AttachmentNotFound(attachment)));
 
                     let attachment_transform = get_attachment_transformation(attachment.1);
                     let bone_data = bone_data * attachment_transform;
@@ -573,12 +573,12 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
     let bezier = match formula {
         &None =>
             return Ok(from + position * (to - from)),
-        &Some(format::CurvePredefined(ref a)) if a.as_slice() == "linear" =>
+        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a.as_slice() == "linear" =>
             return Ok(from + position * (to - from)),
-        &Some(format::CurvePredefined(ref a)) if a.as_slice() == "stepped" =>
+        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a.as_slice() == "stepped" =>
             return Ok(from),
-        &Some(format::CurveBezier(ref a)) => a.as_slice(),
-        a => return Err(UnknownCurveFunction(a.to_string())),
+        &Some(format::TimelineCurve::CurveBezier(ref a)) => a.as_slice(),
+        a => return Err(CalculationError::UnknownCurveFunction(a.to_string())),
     };
     
     let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
@@ -587,7 +587,7 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
         (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
             (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
         a =>
-            return Err(UnknownCurveFunction(a.to_string()))
+            return Err(CalculationError::UnknownCurveFunction(a.to_string()))
     };
 
     let factor = std::iter::count(0.0, 0.02)
