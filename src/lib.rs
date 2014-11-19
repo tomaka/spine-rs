@@ -153,7 +153,7 @@ impl SpineDocument {
         // getting a reference to the `format::Animation`
         let animation: &format::Animation = 
             if let Some(anim) = self.source.animations.as_ref() {
-                match anim.find_equiv(animation) {
+                match anim.get(animation) {
                     Some(a) => a,
                     None => return None
                 }
@@ -240,13 +240,13 @@ impl SpineDocument {
         let elapsed = elapsed;
 
         // getting a reference to the `format::Skin`
-        let skin = try!(self.source.skins.as_ref().and_then(|l| l.find_equiv(skin))
+        let skin = try!(self.source.skins.as_ref().and_then(|l| l.get(skin))
             .ok_or(CalculationError::SkinNotFound));
 
         // getting a reference to the `format::Animation`
         let animation: Option<&format::Animation> = match animation {
             Some(animation) => Some(try!(self.source.animations.as_ref()
-                .and_then(|l| l.find_equiv(animation)).ok_or(CalculationError::AnimationNotFound))),
+                .and_then(|l| l.get(animation)).ok_or(CalculationError::AnimationNotFound))),
             None => None
         };
 
