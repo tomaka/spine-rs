@@ -140,7 +140,7 @@ impl from_json::FromJson for TimelineCurve {
     fn from_json(input: &serialize::json::Json) -> Result<TimelineCurve, from_json::FromJsonError> {
         use from_json::FromJson;
 
-        if input.is_list() {
+        if input.is_array() {
             Ok(TimelineCurve::CurveBezier(try!(FromJson::from_json(input))))
         } else {
             Ok(TimelineCurve::CurvePredefined(try!(FromJson::from_json(input))))
