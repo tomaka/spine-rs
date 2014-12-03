@@ -71,7 +71,7 @@ impl from_json::FromJson for AttachmentType {
             "region" => Ok(AttachmentType::Region),
             "regionsequence" => Ok(AttachmentType::RegionSequence),
             "boundingbox" => Ok(AttachmentType::BoundingBox),
-            _ => Err(from_json::ExpectError("AttachmentType", input.clone()))
+            _ => Err(from_json::FromJsonError::ExpectError("AttachmentType", input.clone()))
         }
     }
 }
