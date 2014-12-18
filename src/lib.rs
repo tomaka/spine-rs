@@ -69,10 +69,7 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 ```
 
 */
-
-#![feature(if_let)]
 #![feature(phase)]
-#![feature(tuple_indexing)]
 
 #![deny(missing_docs)]
 #![deny(warnings)]
@@ -264,7 +261,7 @@ impl SpineDocument {
 
                     // adding this to the `bones` vec above
                     match bones.iter_mut().find(|&&(b, _)| b.name == *bone_name) {
-                        Some(&(_, ref mut data)) => { *data = *data + anim_data; },
+                        Some(&(_, ref mut data)) => { *data = data.clone() + anim_data; },
                         None => ()
                     };
                 }
@@ -436,7 +433,7 @@ impl BoneData {
 }
 
 impl Add<BoneData, BoneData> for BoneData {
-    fn add(&self, rhs: &BoneData) -> BoneData {
+    fn add(self, rhs: BoneData) -> BoneData {
         BoneData {
             position: (self.position.0 + rhs.position.0, self.position.1 + rhs.position.1),
             rotation: self.rotation + rhs.rotation,

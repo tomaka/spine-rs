@@ -36,7 +36,7 @@ fn possible_sprites() {
     let mut results = doc.get_possible_sprites();
     results.sort();
 
-    assert!(results.as_slice() == &[
+    assert!(results.as_slice() == [
         "eyes", "eyes-closed", "head", "left-arm", "left-foot", "left-hand", "left-lower-leg",
         "left-shoulder", "left-upper-leg", "neck", "pelvis", "right-arm", "right-foot",
         "right-hand", "right-lower-leg", "right-shoulder", "right-upper-leg", "torso"
