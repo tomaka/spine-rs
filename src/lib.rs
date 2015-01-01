@@ -208,7 +208,15 @@ impl SpineDocument {
     pub fn get_possible_sprites(&self) -> Vec<&str> {
         if let Some(ref list) = self.source.skins {
             let mut result = list.iter().flat_map(|(_, skin)| skin.iter())
-                .flat_map(|(_, slot)| slot.keys()).map(|e| e.as_slice()).collect::<Vec<_>>();
+                                 .flat_map(|(_, slot)| slot.iter())
+                                 .map(|(name, vals)| {
+                                     if let Some(ref name) = vals.name {
+                                         name.as_slice()
+                                     } else {
+                                         name.as_slice()
+                                     }
+                                 })
+                                 .collect::<Vec<_>>();
 
             result.sort();
             result.dedup();
@@ -238,6 +246,10 @@ impl SpineDocument {
 
         // getting a reference to the `format::Skin`
         let skin = try!(self.source.skins.as_ref().and_then(|l| l.get(skin))
+            .ok_or(CalculationError::SkinNotFound));
+
+        // getting a reference to "default" skin
+        let default_skin = try!(self.source.skins.as_ref().and_then(|l| l.get("default"))
             .ok_or(CalculationError::SkinNotFound));
 
         // getting a reference to the `format::Animation`
@@ -342,8 +354,9 @@ impl SpineDocument {
 
             for (slot_name, bone_data, _color, attachment) in slots.into_iter() {
                 if let Some(attachment) = attachment {
-                    let attachments = try!(skin.iter().find(|&(slot, _)| slot.as_slice() == slot_name)
-                        .ok_or(CalculationError::SlotNotFound(slot_name)));
+                    let attachments = try!(skin.iter().chain(default_skin.iter())
+                                           .find(|&(slot, _)| slot.as_slice() == slot_name)
+                                           .ok_or(CalculationError::SlotNotFound(slot_name)));
 
                     let attachment = try!(attachments.1.iter()
                         .find(|&(a, _)| a.as_slice() == attachment)
@@ -352,8 +365,14 @@ impl SpineDocument {
                     let attachment_transform = get_attachment_transformation(attachment.1);
                     let bone_data = bone_data * attachment_transform;
 
+                    let attachment = if let Some(ref name) = attachment.1.name {
+                        name.as_slice()
+                    } else {
+                        attachment.0.as_slice()
+                    };
+
                     results.push((
-                        attachment.0.as_slice(),
+                        attachment,
                         bone_data,
                         Rgba { a: 255, c: Rgb::new(255, 255, 255) }
                     ));
