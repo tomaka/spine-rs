@@ -69,6 +69,8 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 ```
 
 */
+#![feature(associated_types)]
+#![feature(default_type_params)]
 #![feature(phase)]
 
 #![deny(missing_docs)]
@@ -390,7 +392,7 @@ impl SpineDocument {
 }
 
 /// Result of an animation state calculation.
-#[deriving(Show)]
+#[derive(Show)]
 pub struct Calculation<'a> {
     /// The list of sprites that should be drawn.
     ///
@@ -402,7 +404,7 @@ pub struct Calculation<'a> {
 }
 
 /// Error that can happen while calculating an animation.
-#[deriving(Clone, Show, PartialEq, Eq)]
+#[derive(Clone, Show, PartialEq, Eq)]
 pub enum CalculationError<'a> {
     /// The requested skin was not found.
     SkinNotFound,
@@ -432,7 +434,7 @@ pub enum CalculationError<'a> {
 /// Informations about a bone's position.
 ///
 /// Can be absolute or relative to its parent.
-#[deriving(Show, Clone)]
+#[derive(Show, Clone)]
 struct BoneData {
     position: (f32, f32),
     rotation: f32,
@@ -451,7 +453,9 @@ impl BoneData {
     }
 }
 
-impl Add<BoneData, BoneData> for BoneData {
+impl std::ops::Add<BoneData> for BoneData {
+    type Output = BoneData;
+
     fn add(self, rhs: BoneData) -> BoneData {
         BoneData {
             position: (self.position.0 + rhs.position.0, self.position.1 + rhs.position.1),

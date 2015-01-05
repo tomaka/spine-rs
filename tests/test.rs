@@ -4,7 +4,7 @@ use std::io::BufReader;
 
 #[test]
 fn animations_list() {
-    let src: &[u8] = include_bin!("example.json");
+    let src: &[u8] = include_bytes!("example.json");
     let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
 
     assert!(doc.get_animations_list().as_slice().get(0).unwrap() == &"walk" ||
@@ -19,7 +19,7 @@ fn animations_list() {
 
 #[test]
 fn skins_list() {
-    let src: &[u8] = include_bin!("example.json");
+    let src: &[u8] = include_bytes!("example.json");
     let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
 
     assert!(doc.get_skins_list().as_slice().get(0).unwrap() == &"default");
@@ -30,7 +30,7 @@ fn skins_list() {
 
 #[test]
 fn possible_sprites() {
-    let src: &[u8] = include_bin!("example.json");
+    let src: &[u8] = include_bytes!("example.json");
     let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
 
     let mut results = doc.get_possible_sprites();
