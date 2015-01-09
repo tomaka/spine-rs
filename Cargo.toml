@@ -18,3 +18,6 @@ git = "https://github.com/bjz/color-rs.git"
 
 [dependencies.from_json]
 git = "https://github.com/tomaka/from_json"
+
+[dependencies.from_json_macros]
+git = "https://github.com/tomaka/from_json"

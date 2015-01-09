@@ -69,14 +69,12 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 ```
 
 */
-#![feature(associated_types)]
-#![feature(default_type_params)]
-#![feature(phase)]
+#![feature(plugin)]
 
 #![deny(missing_docs)]
 #![deny(warnings)]
 
-#[phase(plugin)]
+#[plugin]
 extern crate from_json_macros;
 
 extern crate color;
