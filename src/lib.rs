@@ -71,6 +71,7 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 */
 #![feature(plugin)]
 
+#![allow(unstable)]
 #![deny(missing_docs)]
 #![deny(warnings)]
 
@@ -96,9 +97,9 @@ pub struct SpineDocument {
 impl SpineDocument {
     /// Loads a document from a reader.
     pub fn new<R: Reader>(mut reader: R) -> Result<SpineDocument, String> {
-        let document = try!(json::from_reader(&mut reader).map_err(|e| e.to_string()));
+        let document = try!(json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
         let document: format::Document = try!(from_json::FromJson::from_json(&document)
-            .map_err(|e| e.to_string()));
+            .map_err(|e| format!("{:?}", e)));
 
         Ok(SpineDocument {
             source: document
@@ -272,8 +273,8 @@ impl SpineDocument {
                     let anim_data = try!(timelines_to_bonedata(timelines, elapsed));
 
                     // adding this to the `bones` vec above
-                    match bones.iter_mut().find(|&&(b, _)| b.name == *bone_name) {
-                        Some(&(_, ref mut data)) => { *data = data.clone() + anim_data; },
+                    match bones.iter_mut().find(|&&mut (b, _)| b.name == *bone_name) {
+                        Some(&mut (_, ref mut data)) => { *data = data.clone() + anim_data; },
                         None => ()
                     };
                 }
@@ -337,8 +338,8 @@ impl SpineDocument {
                         try!(timelines_to_slotdata(timelines, elapsed));
 
                     // adding this to the `slots` vec above
-                    match slots.iter_mut().find(|&&(s, _, _, _)| s == slot_name.as_slice()) {
-                        Some(&(_, _, ref mut color, ref mut attachment)) => {
+                    match slots.iter_mut().find(|&&mut (s, _, _, _)| s == slot_name.as_slice()) {
+                        Some(&mut (_, _, ref mut color, ref mut attachment)) => {
                             if let Some(c) = anim_color { *color = Some(c) };
                             if let Some(a) = anim_attach { *attachment = Some(a) };
                         },
@@ -596,7 +597,7 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
         &Some(format::TimelineCurve::CurvePredefined(ref a)) if a.as_slice() == "stepped" =>
             return Ok(from),
         &Some(format::TimelineCurve::CurveBezier(ref a)) => a.as_slice(),
-        a => return Err(CalculationError::UnknownCurveFunction(a.to_string())),
+        a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
     };
     
     let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
@@ -605,7 +606,7 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
         (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
             (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
         a =>
-            return Err(CalculationError::UnknownCurveFunction(a.to_string()))
+            return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
     };
 
     let factor = std::iter::count(0.0, 0.02)
