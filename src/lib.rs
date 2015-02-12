@@ -75,8 +75,7 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 #![deny(missing_docs)]
 #![deny(warnings)]
 
-#[plugin]
-extern crate from_json_macros;
+#![plugin(from_json_macros)]
 
 extern crate color;
 extern crate cgmath;
