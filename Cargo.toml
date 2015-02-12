@@ -21,3 +21,6 @@ git = "https://github.com/tomaka/from_json"
 
 [dependencies.from_json_macros]
 git = "https://github.com/tomaka/from_json"
+
+[dev-dependencies]
+clock_ticks = "*"
