@@ -69,7 +69,7 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 ```
 
 */
-#![feature(plugin)]
+#![feature(custom_attribute, plugin)]
 
 #![allow(unstable)]
 #![deny(missing_docs)]
