@@ -10,8 +10,8 @@ repository = "https://github.com/tomaka/spine-rs"
 name = "spine"
 path = "src/lib.rs"
 
-[dependencies.cgmath]
-git = "https://github.com/bjz/cgmath-rs"
+[dependencies]
+cgmath = "*"
 
 [dependencies.color]
 git = "https://github.com/bjz/color-rs.git"
