@@ -5,7 +5,7 @@ use from_json;
 use serialize;
 use std::collections::HashMap;
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct Document {
     pub bones: Option<Vec<Bone>>,
@@ -14,7 +14,7 @@ pub struct Document {
     pub animations: Option<HashMap<String, Animation>>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct Bone {
     pub name: String,
@@ -27,7 +27,7 @@ pub struct Bone {
     pub rotation: Option<f64>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct Slot {
     pub name: String,
@@ -36,7 +36,7 @@ pub struct Slot {
     pub attachment: Option<String>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct Attachment {
     pub name: Option<String>,
@@ -54,7 +54,7 @@ pub struct Attachment {
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 pub enum AttachmentType {
     Region,
     RegionSequence,
@@ -76,18 +76,18 @@ impl from_json::FromJson for AttachmentType {
     }
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct Event {
     pub name: String,
     #[from_json_name = "int"]
-    pub int_: Option<int>,
+    pub int_: Option<i32>,
     #[from_json_name = "float"]
     pub float_: Option<f64>,
     pub string: Option<String>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct Animation {
     pub bones: Option<HashMap<String, BoneTimeline>>,
@@ -96,7 +96,7 @@ pub struct Animation {
     pub draworder: Option<Vec<DrawOrderTimeline>>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct BoneTimeline {
     pub translate: Option<Vec<BoneTranslateTimeline>>,
@@ -104,7 +104,7 @@ pub struct BoneTimeline {
     pub scale: Option<Vec<BoneScaleTimeline>>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct BoneTranslateTimeline {
     pub time: f64,
@@ -113,7 +113,7 @@ pub struct BoneTranslateTimeline {
     pub y: Option<f64>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct BoneRotateTimeline {
     pub time: f64,
@@ -121,7 +121,7 @@ pub struct BoneRotateTimeline {
     pub angle: Option<f64>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct BoneScaleTimeline {
     pub time: f64,
@@ -130,7 +130,7 @@ pub struct BoneScaleTimeline {
     pub y: Option<f64>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 pub enum TimelineCurve {
     CurveBezier(Vec<f64>),
     CurvePredefined(String),
@@ -148,21 +148,21 @@ impl from_json::FromJson for TimelineCurve {
     }
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct SlotTimeline {
     pub attachment: Option<Vec<SlotAttachmentTimeline>>,
     pub color: Option<Vec<SlotColorTimeline>>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct SlotAttachmentTimeline {
     pub time: f64,
     pub name: Option<String>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct SlotColorTimeline {
     pub time: f64,
@@ -170,29 +170,29 @@ pub struct SlotColorTimeline {
     pub curve: Option<TimelineCurve>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct EventKeyframe {
     time: f64,
     name: String,
     #[from_json_name = "int"]
-    int_: Option<int>,
+    int_: Option<i32>,
     #[from_json_name = "float"]
     float_: Option<f64>,
     #[from_json_name = "string"]
     string_: Option<String>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct DrawOrderTimeline {
     time: f64,
     offsets: Option<Vec<DrawOrderTimelineOffset>>,
 }
 
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 #[from_json_struct]
 pub struct DrawOrderTimelineOffset {
     slot: String,
-    offset: int,
+    offset: i32,
 }

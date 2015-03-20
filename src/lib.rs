@@ -86,6 +86,8 @@ use color::{Rgb, Rgba};
 use cgmath::Matrix4;
 use serialize::json;
 
+use std::io::Read;
+
 mod format;
 
 /// Spine document loaded in memory.
@@ -95,7 +97,7 @@ pub struct SpineDocument {
 
 impl SpineDocument {
     /// Loads a document from a reader.
-    pub fn new<R: Reader>(mut reader: R) -> Result<SpineDocument, String> {
+    pub fn new<R: Read>(mut reader: R) -> Result<SpineDocument, String> {
         let document = try!(json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
         let document: format::Document = try!(from_json::FromJson::from_json(&document)
             .map_err(|e| format!("{:?}", e)));
@@ -390,7 +392,7 @@ impl SpineDocument {
 }
 
 /// Result of an animation state calculation.
-#[derive(Show)]
+#[derive(Debug)]
 pub struct Calculation<'a> {
     /// The list of sprites that should be drawn.
     ///
@@ -402,7 +404,7 @@ pub struct Calculation<'a> {
 }
 
 /// Error that can happen while calculating an animation.
-#[derive(Clone, Show, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalculationError<'a> {
     /// The requested skin was not found.
     SkinNotFound,
@@ -432,7 +434,7 @@ pub enum CalculationError<'a> {
 /// Informations about a bone's position.
 ///
 /// Can be absolute or relative to its parent.
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 struct BoneData {
     position: (f32, f32),
     rotation: f32,
@@ -608,7 +610,7 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
             return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
     };
 
-    let factor = std::iter::count(0.0, 0.02)
+    let factor = (0.0..).step_by(0.02)
         .take_while(|v| *v <= 1.0)
         .map(|t| {
             let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
@@ -664,7 +666,7 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
             .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
         {
             Some((ref before, _)) => {
-                before.color.as_ref().map(|e| e.as_slice())
+                before.color.as_ref().map(|e| &e[..])
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
