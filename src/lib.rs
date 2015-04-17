@@ -11,7 +11,8 @@ This function returns an `Err` if the document is not valid JSON or if something
  recognized in it.
 
 ```no_run
-# use std::io::fs::File;
+# use std::fs::File;
+# use std::path::Path;
 let document = spine::SpineDocument::new(File::open(&Path::new("skeleton.json")).unwrap())
     .unwrap();
 ```
@@ -60,7 +61,7 @@ The results contain the list of sprites that need to be drawn, with their matrix
 ```no_run
 # use std::collections::HashMap;
 # let results: spine::Calculation = unsafe { std::mem::uninitialized() };
-# let textures_list: HashMap<&str, int> = unsafe { std::mem::uninitialized() };
+# let textures_list: HashMap<&str, i32> = unsafe { std::mem::uninitialized() };
 # fn draw<A,B,C>(_: A, _: B, _: C) {}
 for (sprite_name, matrix, color) in results.sprites.into_iter() {
     let texture = textures_list.get(&sprite_name).unwrap();
@@ -69,22 +70,15 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 ```
 
 */
-#![feature(custom_attribute, plugin)]
-
-#![allow(unstable)]
 #![deny(missing_docs)]
-#![deny(warnings)]
-
-#![plugin(from_json_macros)]
 
 extern crate color;
 extern crate cgmath;
+#[macro_use]
 extern crate from_json;
-extern crate serialize;
 
 use color::{Rgb, Rgba};
 use cgmath::Matrix4;
-use serialize::json;
 
 use std::io::Read;
 
@@ -98,7 +92,7 @@ pub struct SpineDocument {
 impl SpineDocument {
     /// Loads a document from a reader.
     pub fn new<R: Read>(mut reader: R) -> Result<SpineDocument, String> {
-        let document = try!(json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
+        let document = try!(from_json::Json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
         let document: format::Document = try!(from_json::FromJson::from_json(&document)
             .map_err(|e| format!("{:?}", e)));
 
@@ -110,7 +104,7 @@ impl SpineDocument {
     /// Returns the list of all animations in this document.
     pub fn get_animations_list(&self) -> Vec<&str> {
         if let Some(ref list) = self.source.animations {
-            list.keys().map(|e| e.as_slice()).collect()
+            list.keys().map(|e| &e[..]).collect()
         } else {
             Vec::new()
         }
@@ -119,7 +113,7 @@ impl SpineDocument {
     /// Returns the list of all skins in this document.
     pub fn get_skins_list(&self) -> Vec<&str> {
         if let Some(ref list) = self.source.skins {
-            list.keys().map(|e| e.as_slice()).collect()
+            list.keys().map(|e| &e[..]).collect()
         } else {
             Vec::new()
         }
@@ -213,9 +207,9 @@ impl SpineDocument {
                                  .flat_map(|(_, slot)| slot.iter())
                                  .map(|(name, vals)| {
                                      if let Some(ref name) = vals.name {
-                                         name.as_slice()
+                                         &name[..]
                                      } else {
-                                         name.as_slice()
+                                         &name[..]
                                      }
                                  })
                                  .collect::<Vec<_>>();
@@ -307,7 +301,7 @@ impl SpineDocument {
                 }
             }
 
-            (bone.name.as_slice(), current_matrix.clone())
+            (&bone.name[..], current_matrix.clone())
 
         }).collect();
 
@@ -318,10 +312,10 @@ impl SpineDocument {
                 let mut result = Vec::new();
 
                 for slot in slots.iter() {
-                    let bone = try!(bones.iter().find(|&&(name, _)| name == slot.bone.as_slice())
-                        .ok_or(CalculationError::BoneNotFound(slot.bone.as_slice())));
-                    result.push((slot.name.as_slice(), bone.1, slot.color.as_ref()
-                        .map(|s| s.as_slice()), slot.attachment.as_ref().map(|s| s.as_slice())))
+                    let bone = try!(bones.iter().find(|&&(name, _)| name == slot.bone)
+                        .ok_or(CalculationError::BoneNotFound(&slot.bone)));
+                    result.push((&slot.name[..], bone.1, slot.color.as_ref()
+                        .map(|s| &s[..]), slot.attachment.as_ref().map(|s| &s[..])))
                 }
 
                 result
@@ -339,7 +333,7 @@ impl SpineDocument {
                         try!(timelines_to_slotdata(timelines, elapsed));
 
                     // adding this to the `slots` vec above
-                    match slots.iter_mut().find(|&&mut (s, _, _, _)| s == slot_name.as_slice()) {
+                    match slots.iter_mut().find(|&&mut (s, _, _, _)| s == slot_name) {
                         Some(&mut (_, _, ref mut color, ref mut attachment)) => {
                             if let Some(c) = anim_color { *color = Some(c) };
                             if let Some(a) = anim_attach { *attachment = Some(a) };
@@ -357,20 +351,20 @@ impl SpineDocument {
             for (slot_name, bone_data, _color, attachment) in slots.into_iter() {
                 if let Some(attachment) = attachment {
                     let attachments = try!(skin.iter().chain(default_skin.iter())
-                                           .find(|&(slot, _)| slot.as_slice() == slot_name)
+                                           .find(|&(slot, _)| slot == slot_name)
                                            .ok_or(CalculationError::SlotNotFound(slot_name)));
 
                     let attachment = try!(attachments.1.iter()
-                        .find(|&(a, _)| a.as_slice() == attachment)
+                        .find(|&(a, _)| a == attachment)
                         .ok_or(CalculationError::AttachmentNotFound(attachment)));
 
                     let attachment_transform = get_attachment_transformation(attachment.1);
                     let bone_data = bone_data * attachment_transform;
 
                     let attachment = if let Some(ref name) = attachment.1.name {
-                        name.as_slice()
+                        &name[..]
                     } else {
-                        attachment.0.as_slice()
+                        &attachment.0[..]
                     };
 
                     results.push((
@@ -593,11 +587,11 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
     let bezier = match formula {
         &None =>
             return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a.as_slice() == "linear" =>
+        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
             return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a.as_slice() == "stepped" =>
+        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
             return Ok(from),
-        &Some(format::TimelineCurve::CurveBezier(ref a)) => a.as_slice(),
+        &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
         a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
     };
     
@@ -610,7 +604,7 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
             return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
     };
 
-    let factor = (0.0..).step_by(0.02)
+    let factor = (0 ..).map(|v| v as f32 * 0.02)
         .take_while(|v| *v <= 1.0)
         .map(|t| {
             let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
@@ -645,11 +639,11 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
             .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
         {
             Some((ref before, _)) => {
-                before.name.as_ref().map(|e| e.as_slice())
+                before.name.as_ref().map(|e| &e[..])
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().and_then(|t| (t.name.as_ref().map(|e| e.as_slice())))
+                timeline.last().and_then(|t| (t.name.as_ref().map(|e| &e[..])))
             }
         }
 
@@ -670,7 +664,7 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().and_then(|t| (t.color.as_ref().map(|e| e.as_slice())))
+                timeline.last().and_then(|t| (t.color.as_ref().map(|e| &e[..])))
             }
         }
 
