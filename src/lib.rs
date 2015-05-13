@@ -437,10 +437,10 @@ struct BoneData {
 
 impl BoneData {
     fn to_matrix(&self) -> Matrix4<f32> {
-        use cgmath::{Matrix2, Vector3, ToMatrix4, ToRad};
+        use cgmath::{Matrix2, Vector3};
 
         let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0, 0.0, self.scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-        let rotation_matrix = Matrix2::from_angle(cgmath::deg(self.rotation).to_rad()).to_matrix4();
+        let rotation_matrix = Matrix4::from(Matrix2::from_angle(cgmath::deg(self.rotation).into()));
         let translation_matrix = Matrix4::from_translation(&Vector3::new(self.position.0, self.position.1, 0.0));
 
         translation_matrix * rotation_matrix * scale_matrix
