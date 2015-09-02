@@ -350,9 +350,12 @@ impl SpineDocument {
 
             for (slot_name, bone_data, _color, attachment) in slots.into_iter() {
                 if let Some(attachment) = attachment {
-                    let attachments = try!(skin.iter().chain(default_skin.iter())
-                                           .find(|&(slot, _)| slot == slot_name)
-                                           .ok_or(CalculationError::SlotNotFound(slot_name)));
+                    let attachments = match skin.iter().chain(default_skin.iter())
+                                                .find(|&(slot, _)| slot == slot_name)
+                    {
+                        Some(a) => a,
+                        None => continue
+                    };
 
                     let attachment = try!(attachments.1.iter()
                         .find(|&(a, _)| a == attachment)
