@@ -76,8 +76,6 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 
 extern crate color;
 extern crate cgmath;
-// #[macro_use]
-// extern crate from_json;
 extern crate serde;
 extern crate serde_json;
 
@@ -85,6 +83,7 @@ use color::{Rgb, Rgba};
 use cgmath::Matrix4;
 
 use std::io::Read;
+use serde_json::Value;
 
 mod format;
 
@@ -95,7 +94,7 @@ pub struct SpineDocument {
 
 impl SpineDocument {
     /// Loads a document from a reader.
-    pub fn new<R: Read>(mut reader: R) -> Result<SpineDocument, String> {
+    pub fn new<R: Read>(reader: R) -> Result<SpineDocument, String> {
 
         let document: format::Document = try!(serde_json::from_reader(reader)
                                               .map_err(|e| format!("{:?}", e)));
@@ -595,17 +594,30 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
 {
     assert!(position >= 0.0 && position <= 1.0);
 
-    // let bezier = match formula {
-    //     &None =>
-    //         return Ok(from + position * (to - from)),
-    //     &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
-    //         return Ok(from + position * (to - from)),
-    //     &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
-    //         return Ok(from),
-    //     &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
-    //     a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
-    // };
-    //
+    let bezier = match formula {
+        &None =>
+            return Ok(from + position * (to - from)),
+        &Some(Value::String(ref a)) if a == "linear" =>
+            return Ok(from + position * (to - from)),
+        &Some(Value::String(ref a)) if a == "stepped" =>
+            return Ok(from),
+        &Some(Value::Array(ref a)) => a,
+        a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
+        // &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
+        //     return Ok(from + position * (to - from)),
+        // &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
+        //     return Ok(from),
+        // &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
+        // a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
+    };
+
+    let c = bezier.iter().map(|v| v.as_f64().unwrap() as f32).take(4).collect::<Vec<f32>>();
+    if c.len() < 4 {
+        return Err(CalculationError::UnknownCurveFunction(format!("{:?}", bezier)));
+    }
+
+
+
     // let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
     //                                   bezier.get(2), bezier.get(3))
     // {
@@ -614,30 +626,29 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
     //     a =>
     //         return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
     // };
-    //
-    // let factor = (0 ..).map(|v| v as f32 * 0.02)
-    //     .take_while(|v| *v <= 1.0)
-    //     .map(|t| {
-    //         let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
-    //             + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
-    //         let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
-    //             + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
-    //
-    //         (x, y)
-    //     })
-    //     .scan((0.0, 0.0), |previous, current| {
-    //         let result = Some((previous.clone(), current));
-    //         *previous = current;
-    //         result
-    //     })
-    //     .find(|&(previous, current)| {
-    //         position >= previous.0 && position < current.0
-    //     })
-    //     .map(|((_, val), _)| val)
-    //     .unwrap_or(1.0);
-    //
-    // Ok(from + factor * (to - from))
-    Ok(0.0)
+
+    let factor = (0 ..).map(|v| v as f32 * 0.02)
+        .take_while(|v| *v <= 1.0)
+        .map(|t| {
+            let x = 3.0 * c[0] * t * (1.0 - t) * (1.0 - t)
+                + 3.0 * c[2] * t * t * (1.0 - t) + t * t * t;
+            let y = 3.0 * c[1] * t * (1.0 - t) * (1.0 - t)
+                + 3.0 * c[3] * t * t * (1.0 - t) + t * t * t;
+
+            (x, y)
+        })
+        .scan((0.0, 0.0), |previous, current| {
+            let result = Some((previous.clone(), current));
+            *previous = current;
+            result
+        })
+        .find(|&(previous, current)| {
+            position >= previous.0 && position < current.0
+        })
+        .map(|((_, val), _)| val)
+        .unwrap_or(1.0);
+
+    Ok(from + factor * (to - from))
 }
 
 /// Builds the color and attachment corresponding to a slot timeline.
