@@ -71,11 +71,15 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 
 */
 #![deny(missing_docs)]
+#![feature(custom_derive, plugin, custom_attribute, type_macros)]
+#![plugin(serde_macros)]
 
 extern crate color;
 extern crate cgmath;
-#[macro_use]
-extern crate from_json;
+// #[macro_use]
+// extern crate from_json;
+extern crate serde;
+extern crate serde_json;
 
 use color::{Rgb, Rgba};
 use cgmath::Matrix4;
@@ -92,9 +96,13 @@ pub struct SpineDocument {
 impl SpineDocument {
     /// Loads a document from a reader.
     pub fn new<R: Read>(mut reader: R) -> Result<SpineDocument, String> {
-        let document = try!(from_json::Json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
-        let document: format::Document = try!(from_json::FromJson::from_json(&document)
-            .map_err(|e| format!("{:?}", e)));
+
+        let document: format::Document = try!(serde_json::from_reader(reader)
+                                              .map_err(|e| format!("{:?}", e)));
+
+        // let document = try!(from_json::Json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
+        // let document: format::Document = try!(from_json::FromJson::from_json(&document)
+        //     .map_err(|e| format!("{:?}", e)));
 
         Ok(SpineDocument {
             source: document
@@ -140,11 +148,11 @@ impl SpineDocument {
     /// Returns the duration of an animation.
     ///
     /// Returns `None` if the animation doesn't exist.
-    /// 
+    ///
     /// TODO: check events and draworder?
     pub fn get_animation_duration(&self, animation: &str) -> Option<f32> {
         // getting a reference to the `format::Animation`
-        let animation: &format::Animation = 
+        let animation: &format::Animation =
             if let Some(anim) = self.source.animations.as_ref() {
                 match anim.get(animation) {
                     Some(a) => a,
@@ -229,7 +237,7 @@ impl SpineDocument {
     // TODO: implement draw order timeline
     // TODO: implement events
     // TODO: implement other attachment types
-    pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32) 
+    pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32)
         -> Result<Calculation, CalculationError>
     {
         // adapting elapsed
@@ -570,7 +578,7 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
         (1.0, 1.0)
     };
 
-    
+
     // returning
     Ok(BoneData {
         position: position,
@@ -587,48 +595,49 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
 {
     assert!(position >= 0.0 && position <= 1.0);
 
-    let bezier = match formula {
-        &None =>
-            return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
-            return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
-            return Ok(from),
-        &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
-        a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
-    };
-    
-    let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
-                                      bezier.get(2), bezier.get(3))
-    {
-        (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
-            (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
-        a =>
-            return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
-    };
-
-    let factor = (0 ..).map(|v| v as f32 * 0.02)
-        .take_while(|v| *v <= 1.0)
-        .map(|t| {
-            let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
-            let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
-
-            (x, y)
-        })
-        .scan((0.0, 0.0), |previous, current| {
-            let result = Some((previous.clone(), current));
-            *previous = current;
-            result
-        })
-        .find(|&(previous, current)| {
-            position >= previous.0 && position < current.0
-        })
-        .map(|((_, val), _)| val)
-        .unwrap_or(1.0);
-
-    Ok(from + factor * (to - from))
+    // let bezier = match formula {
+    //     &None =>
+    //         return Ok(from + position * (to - from)),
+    //     &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
+    //         return Ok(from + position * (to - from)),
+    //     &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
+    //         return Ok(from),
+    //     &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
+    //     a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
+    // };
+    //
+    // let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
+    //                                   bezier.get(2), bezier.get(3))
+    // {
+    //     (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
+    //         (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
+    //     a =>
+    //         return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
+    // };
+    //
+    // let factor = (0 ..).map(|v| v as f32 * 0.02)
+    //     .take_while(|v| *v <= 1.0)
+    //     .map(|t| {
+    //         let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
+    //             + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
+    //         let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
+    //             + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
+    //
+    //         (x, y)
+    //     })
+    //     .scan((0.0, 0.0), |previous, current| {
+    //         let result = Some((previous.clone(), current));
+    //         *previous = current;
+    //         result
+    //     })
+    //     .find(|&(previous, current)| {
+    //         position >= previous.0 && position < current.0
+    //     })
+    //     .map(|((_, val), _)| val)
+    //     .unwrap_or(1.0);
+    //
+    // Ok(from + factor * (to - from))
+    Ok(0.0)
 }
 
 /// Builds the color and attachment corresponding to a slot timeline.
@@ -676,7 +685,7 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
         None
     };
 
-    
+
     // returning
     Ok((color, attachment))
 }
