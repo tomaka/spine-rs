@@ -39,8 +39,8 @@ pub struct Slot {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Attachment {
     pub name: Option<String>,
-    #[serde(alias="type")]
-    pub type_: Option<AttachmentType>,
+    #[serde(default, alias="type")]
+    pub type_: AttachmentType,
     #[serde(default)]
     pub x: f64,
     #[serde(default)]
@@ -63,6 +63,12 @@ pub enum AttachmentType {
     Region,
     RegionSequence,
     BoundingBox,
+}
+
+impl Default for AttachmentType {
+    fn default() -> AttachmentType {
+        AttachmentType::Region
+    }
 }
 
 impl Deserialize for AttachmentType {
@@ -93,10 +99,10 @@ impl Deserialize for AttachmentType {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Event {
     pub name: String,
-    #[serde(alias="int")]
-    pub int_: Option<i32>,
-    #[serde(alias="float")]
-    pub float_: Option<f64>,
+    #[serde(alias="int", default)]
+    pub int_: i32,
+    #[serde(alias="float", default)]
+    pub float_: f64,
     pub string: Option<String>,
 }
 
@@ -184,6 +190,7 @@ impl Deserialize for Curve {
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneRotateTimeline {
     pub time: f64,
+    #[serde(default)]
     pub curve: Curve,
     #[serde(default)]
     pub angle: f64,
@@ -273,8 +280,7 @@ mod test {
         let trans: BoneTranslateTimeline = serde_json::from_str(&txt).unwrap();
         assert!(trans.time == 0.0 &&
                 trans.x == -3.0 &&
-                trans.y == -2.25 &&
-                trans.curve.is_none());
+                trans.y == -2.25);
     }
 
     #[test]
@@ -282,8 +288,7 @@ mod test {
         let txt = "{ \"time\": 0.1333, \"angle\": -8.78 }";
         let rot: BoneRotateTimeline = serde_json::from_str(&txt).unwrap();
         assert!(rot.time == 0.1333 &&
-                rot.angle == -8.78 &&
-                rot.curve.is_none());
+                rot.angle == -8.78);
     }
 
     #[test]
