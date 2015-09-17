@@ -16,12 +16,16 @@ pub struct Document {
 pub struct Bone {
     pub name: String,
     pub parent: Option<String>,
-    pub length: Option<f64>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    #[serde(default)]
+    pub length: f64,
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
     pub scaleX: Option<f64>,
     pub scaleY: Option<f64>,
-    pub rotation: Option<f64>,
+    #[serde(default)]
+    pub rotation: f64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -37,13 +41,18 @@ pub struct Attachment {
     pub name: Option<String>,
     #[serde(alias="type")]
     pub type_: Option<AttachmentType>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
     pub scaleX: Option<f64>,
     pub scaleY: Option<f64>,
-    pub rotation: Option<f64>,
-    pub width: Option<f64>,
-    pub height: Option<f64>,
+    #[serde(default)]
+    pub rotation: f64,
+    #[serde(default)]
+    pub width: f64,
+    #[serde(default)]
+    pub height: f64,
     pub fps: Option<f64>,
     pub mode: Option<f64>,
     //vertices: Option<Vec<??>>     // TODO: ?
@@ -110,8 +119,10 @@ pub struct BoneTimeline {
 pub struct BoneTranslateTimeline {
     pub time: f64,
     pub curve: Option<Curve>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -167,15 +178,18 @@ impl Deserialize for Curve {
 pub struct BoneRotateTimeline {
     pub time: f64,
     pub curve: Option<Curve>,
-    pub angle: Option<f64>,
+    #[serde(default)]
+    pub angle: f64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneScaleTimeline {
     pub time: f64,
     pub curve: Option<Curve>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -243,7 +257,7 @@ mod test {
         let bone: Bone = serde_json::from_str(&txt).unwrap();
         assert!(bone.name == "left foot" &&
                 bone.parent.unwrap() == "left lower leg" &&
-                bone.length == Some(46.5));
+                bone.length == 46.5);
     }
 
     #[test]
@@ -251,8 +265,8 @@ mod test {
         let txt = "{ \"time\": 0, \"x\": -3, \"y\": -2.25 }";
         let trans: BoneTranslateTimeline = serde_json::from_str(&txt).unwrap();
         assert!(trans.time == 0.0 &&
-                trans.x == Some(-3.0) &&
-                trans.y == Some(-2.25) &&
+                trans.x == -3.0 &&
+                trans.y == -2.25 &&
                 trans.curve.is_none());
     }
 
@@ -261,7 +275,7 @@ mod test {
         let txt = "{ \"time\": 0.1333, \"angle\": -8.78 }";
         let rot: BoneRotateTimeline = serde_json::from_str(&txt).unwrap();
         assert!(rot.time == 0.1333 &&
-                rot.angle == Some(-8.78) &&
+                rot.angle == -8.78 &&
                 rot.curve.is_none());
     }
 

@@ -470,8 +470,8 @@ impl std::ops::Add<BoneData> for BoneData {
 /// Returns the setup pose of a bone relative to its parent.
 fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
     BoneData {
-        position: (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
-        rotation: bone.rotation.unwrap_or(0.0) as f32,
+        position: (bone.x as f32, bone.y as f32),
+        rotation: bone.rotation as f32,
         scale: (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32),
     }
 }
@@ -479,11 +479,11 @@ fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
 /// Returns the `Matrix` of an attachment.
 fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32> {
     BoneData {
-        position: (attachment.x.unwrap_or(0.0) as f32, attachment.y.unwrap_or(0.0) as f32),
-        rotation: attachment.rotation.unwrap_or(0.0) as f32,
+        position: (attachment.x as f32, attachment.y as f32),
+        rotation: attachment.rotation as f32,
         scale: (
-            attachment.scaleX.unwrap_or(1.0) as f32 * attachment.width.unwrap_or(1.0) as f32 / 2.0,
-            attachment.scaleY.unwrap_or(1.0) as f32 * attachment.height.unwrap_or(1.0) as f32 / 2.0
+            attachment.scaleX.unwrap_or(1.0) as f32 * attachment.width as f32 / 2.0,
+            attachment.scaleY.unwrap_or(1.0) as f32 * attachment.height as f32 / 2.0
         ),
     }.to_matrix()
 }
@@ -501,15 +501,15 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
                 let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
 
                 (
-                    try!(calculate_curve(&before.curve, before.x.unwrap_or(0.0) as f32,
-                        after.x.unwrap_or(0.0) as f32, position)),
-                    try!(calculate_curve(&before.curve, before.y.unwrap_or(0.0) as f32,
-                        after.y.unwrap_or(0.0) as f32, position))
+                    try!(calculate_curve(&before.curve, before.x as f32,
+                        after.x as f32, position)),
+                    try!(calculate_curve(&before.curve, before.y as f32,
+                        after.y as f32, position))
                 )
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| (t.x.unwrap_or(0.0) as f32, t.y.unwrap_or(0.0) as f32))
+                timeline.last().map(|t| (t.x as f32, t.y as f32))
                     .unwrap_or((0.0, 0.0))
             }
         }
@@ -529,22 +529,17 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
             Some((ref before, ref after)) => {
                 // calculating the value using the curve function
                 let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
-
-                try!(calculate_curve(&before.curve, before.angle.unwrap_or(0.0) as f32,
-                    after.angle.unwrap_or(0.0) as f32, position))
+                try!(calculate_curve(&before.curve, before.angle as f32, after.angle as f32, position))
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| t.angle.unwrap_or(0.0) as f32)
-                    .unwrap_or(0.0)
+                timeline.last().map(|t| t.angle as f32).unwrap_or(0.0)
             }
         }
-
     } else {
         // we have no timeline
         0.0
     };
-
 
     // calculating the current scale
     let scale = if let Some(timeline) = timeline.scale.as_ref() {
@@ -557,15 +552,15 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
                 let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
 
                 (
-                    try!(calculate_curve(&before.curve, before.x.unwrap_or(1.0) as f32,
-                        after.x.unwrap_or(1.0) as f32, position)),
-                    try!(calculate_curve(&before.curve, before.y.unwrap_or(1.0) as f32,
-                        after.y.unwrap_or(1.0) as f32, position))
+                    try!(calculate_curve(&before.curve, before.x as f32,
+                        after.x as f32, position)),
+                    try!(calculate_curve(&before.curve, before.y as f32,
+                        after.y as f32, position))
                 )
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| (t.x.unwrap_or(1.0) as f32, t.y.unwrap_or(1.0) as f32))
+                timeline.last().map(|t| (t.x as f32, t.y as f32))
                     .unwrap_or((1.0, 1.0))
             }
         }
