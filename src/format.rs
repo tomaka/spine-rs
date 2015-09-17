@@ -109,40 +109,74 @@ pub struct BoneTimeline {
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneTranslateTimeline {
     pub time: f64,
-    pub curve: Option<TimelineCurve>,
+    pub curve: Option<Curve>,
     pub x: Option<f64>,
     pub y: Option<f64>,
 }
 
-pub type TimelineCurve = ::serde_json::Value;
+#[derive(Debug, Clone)]
+pub enum Curve {
+    Linear,
+    Stepped,
+    Bezier(f64, f64, f64, f64)
+}
+
+impl Deserialize for Curve {
+
+    #[inline]
+    fn deserialize<D>(deserializer: &mut D) -> Result<Curve, D::Error>
+        where D: Deserializer
+    {
+        struct CurveVisitor;
+
+        impl Visitor for CurveVisitor {
+            type Value = Curve;
+
+            fn visit_str<E>(&mut self, value: &str) -> Result<Curve, E> where E: Error {
+                match value {
+                    "linear" => Ok(Curve::Linear),
+                    "stepped" => Ok(Curve::Stepped),
+                    _ => Err(Error::unknown_field(value)),
+                }
+            }
+            
+            fn visit_seq<V>(&mut self, _visitor: V) -> Result<Curve, V::Error> 
+                where V: SeqVisitor
+            {
+                // bezier curve: 4 elements only
+                let cx1: Option<f64> = try!(_visitor.visit());
+                let cy1: Option<f64> = try!(_visitor.visit());
+                let cx2: Option<f64> = try!(_visitor.visit());
+                let cy2: Option<f64> = try!(_visitor.visit());
+                try!(_visitor.end());
+                
+                match (cx1, cy1, cx2, cy2) {
+                    (Some(ref cx1), (Some(ref cy1), (Some(ref cx2), (Some(ref cy2)) =>
+                        Ok(Curve::Bezier(cx1, cy1, cx2, cy2)),
+                    _ => Err(Error::unknown_field(value)),
+                }
+            }
+        }
+
+        deserializer.visit(CurveVisitor)
+    }
+}
+
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneRotateTimeline {
     pub time: f64,
-    pub curve: Option<TimelineCurve>,
+    pub curve: Option<Curve>,
     pub angle: Option<f64>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneScaleTimeline {
     pub time: f64,
-    pub curve: Option<TimelineCurve>,
+    pub curve: Option<Curve>,
     pub x: Option<f64>,
     pub y: Option<f64>,
 }
-
-//
-// impl from_json::FromJson for TimelineCurve {
-//     fn from_json(input: &from_json::Json) -> Result<TimelineCurve, from_json::FromJsonError> {
-//         use from_json::FromJson;
-//
-//         if input.is_array() {
-//             Ok(TimelineCurve::CurveBezier(try!(FromJson::from_json(input))))
-//         } else {
-//             Ok(TimelineCurve::CurvePredefined(try!(FromJson::from_json(input))))
-//         }
-//     }
-// }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct SlotTimeline {
@@ -160,7 +194,7 @@ pub struct SlotAttachmentTimeline {
 pub struct SlotColorTimeline {
     pub time: f64,
     pub color: Option<String>,
-    pub curve: Option<TimelineCurve>,
+    pub curve: Option<Curve>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -263,4 +297,22 @@ mod test {
         }
     }
 
+    #[test]
+    fn test_curve() {
+        let txt = "{ \"linear\" }";
+        let se: Curve = serde_json::from_str(&txt).unwrap();
+        match se {
+            Curve::Linear => (),
+            _ => panic!("{}", "curve should be linear")   
+        };
+        
+        let txt = "[ 0.1 0.2 0.3 0.4 ]";
+        let se: Curve = serde_json::from_str(&txt).unwrap();
+        
+        match se {
+            Curve::Bezier(_, _, _, _) => (),
+            _ => panic!("{}", "curve should be bezier")   
+        }
+    }
+    
 }
