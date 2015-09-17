@@ -118,7 +118,8 @@ pub struct BoneTimeline {
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneTranslateTimeline {
     pub time: f64,
-    pub curve: Option<Curve>,
+    #[serde(default)]
+    pub curve: Curve,
     #[serde(default)]
     pub x: f64,
     #[serde(default)]
@@ -130,6 +131,12 @@ pub enum Curve {
     Linear,
     Stepped,
     Bezier(f64, f64, f64, f64)
+}
+
+impl Default for Curve {
+    fn default() -> Curve {
+        Curve::Linear
+    }
 }
 
 impl Deserialize for Curve {
@@ -177,7 +184,7 @@ impl Deserialize for Curve {
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneRotateTimeline {
     pub time: f64,
-    pub curve: Option<Curve>,
+    pub curve: Curve,
     #[serde(default)]
     pub angle: f64,
 }
@@ -185,11 +192,10 @@ pub struct BoneRotateTimeline {
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneScaleTimeline {
     pub time: f64,
-    pub curve: Option<Curve>,
     #[serde(default)]
-    pub x: f64,
-    #[serde(default)]
-    pub y: f64,
+    pub curve: Curve,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -208,7 +214,8 @@ pub struct SlotAttachmentTimeline {
 pub struct SlotColorTimeline {
     pub time: f64,
     pub color: Option<String>,
-    pub curve: Option<Curve>,
+    #[serde(default)]
+    pub curve: Curve,
 }
 
 #[derive(Deserialize, Debug, Clone)]

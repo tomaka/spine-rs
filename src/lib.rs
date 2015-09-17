@@ -97,10 +97,6 @@ impl SpineDocument {
         let document: format::Document = try!(serde_json::from_reader(reader)
                                               .map_err(|e| format!("{:?}", e)));
 
-        // let document = try!(from_json::Json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
-        // let document: format::Document = try!(from_json::FromJson::from_json(&document)
-        //     .map_err(|e| format!("{:?}", e)));
-
         Ok(SpineDocument {
             source: document
         })
@@ -552,15 +548,15 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
                 let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
 
                 (
-                    try!(calculate_curve(&before.curve, before.x as f32,
-                        after.x as f32, position)),
-                    try!(calculate_curve(&before.curve, before.y as f32,
-                        after.y as f32, position))
+                    try!(calculate_curve(&before.curve, before.x.unwrap_or(1.0) as f32,
+                        after.x.unwrap_or(1.0) as f32, position)),
+                    try!(calculate_curve(&before.curve, before.y.unwrap_or(1.0) as f32,
+                        after.y.unwrap_or(1.0) as f32, position))
                 )
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| (t.x as f32, t.y as f32))
+                timeline.last().map(|t| (t.x.unwrap_or(1.0) as f32, t.y.unwrap_or(1.0) as f32))
                     .unwrap_or((1.0, 1.0))
             }
         }
@@ -582,41 +578,39 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 /// Calculates a curve using the value of a "curve" member.
 ///
 /// Position must be between 0 and 1
-fn calculate_curve(formula: &Option<format::Curve>, from: f32, to: f32,
+fn calculate_curve(formula: &format::Curve, from: f32, to: f32,
     position: f32) -> Result<f32, CalculationError>
 {
     assert!(position >= 0.0 && position <= 1.0);
 
-    let (cx1, cy1, cx2, cy2) = match *formula {
-        None |
-        Some(format::Curve::Linear)  => return Ok(from + position * (to - from)),
-        Some(format::Curve::Stepped) => return Ok(from),
-        Some(format::Curve::Bezier(cx1, cy1, cx2, cy2)) =>
-            (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32)
-    };
+    match *formula {
+        format::Curve::Linear  => Ok(from + position * (to - from)),
+        format::Curve::Stepped => Ok(from),
+        format::Curve::Bezier(cx1, cy1, cx2, cy2) => {
+            let factor = (0 ..).map(|v| v as f64 * 0.02)
+                .take_while(|v| *v <= 1.0)
+                .map(|t| {
+                    let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
+                        + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
+                    let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
+                        + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
 
-    let factor = (0 ..).map(|v| v as f32 * 0.02)
-        .take_while(|v| *v <= 1.0)
-        .map(|t| {
-            let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
-            let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
+                    (x as f32, y as f32)
+                })
+                .scan((0.0, 0.0), |previous, current| {
+                    let result = Some((previous.clone(), current));
+                    *previous = current;
+                    result
+                })
+                .find(|&(previous, current)| {
+                    position >= previous.0 && position < current.0
+                })
+                .map(|((_, val), _)| val)
+                .unwrap_or(1.0);
 
-            (x, y)
-        })
-        .scan((0.0, 0.0), |previous, current| {
-            let result = Some((previous.clone(), current));
-            *previous = current;
-            result
-        })
-        .find(|&(previous, current)| {
-            position >= previous.0 && position < current.0
-        })
-        .map(|((_, val), _)| val)
-        .unwrap_or(1.0);
-
-    Ok(from + factor * (to - from))
+            Ok(from + factor * (to - from))
+        }
+    }
 }
 
 /// Builds the color and attachment corresponding to a slot timeline.
