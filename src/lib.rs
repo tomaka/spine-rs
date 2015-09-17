@@ -79,13 +79,11 @@ extern crate cgmath;
 extern crate serde;
 extern crate serde_json;
 
+mod format;
+
 use color::{Rgb, Rgba};
 use cgmath::Matrix4;
-
 use std::io::Read;
-use serde_json::Value;
-
-mod format;
 
 /// Spine document loaded in memory.
 pub struct SpineDocument {
@@ -589,51 +587,26 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 /// Calculates a curve using the value of a "curve" member.
 ///
 /// Position must be between 0 and 1
-fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
+fn calculate_curve(formula: &Option<format::Curve>, from: f32, to: f32,
     position: f32) -> Result<f32, CalculationError>
 {
     assert!(position >= 0.0 && position <= 1.0);
 
-    let bezier = match formula {
-        &None =>
-            return Ok(from + position * (to - from)),
-        &Some(Value::String(ref a)) if a == "linear" =>
-            return Ok(from + position * (to - from)),
-        &Some(Value::String(ref a)) if a == "stepped" =>
-            return Ok(from),
-        &Some(Value::Array(ref a)) => a,
-        a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
-        // &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
-        //     return Ok(from + position * (to - from)),
-        // &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
-        //     return Ok(from),
-        // &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
-        // a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
+    let (cx1, cy1, cx2, cy2) = match *formula {
+        None |
+        Some(format::Curve::Linear)  => return Ok(from + position * (to - from)),
+        Some(format::Curve::Stepped) => return Ok(from),
+        Some(format::Curve::Bezier(cx1, cy1, cx2, cy2)) =>
+            (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32)
     };
-
-    let c = bezier.iter().map(|v| v.as_f64().unwrap() as f32).take(4).collect::<Vec<f32>>();
-    if c.len() < 4 {
-        return Err(CalculationError::UnknownCurveFunction(format!("{:?}", bezier)));
-    }
-
-
-
-    // let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
-    //                                   bezier.get(2), bezier.get(3))
-    // {
-    //     (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
-    //         (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
-    //     a =>
-    //         return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
-    // };
 
     let factor = (0 ..).map(|v| v as f32 * 0.02)
         .take_while(|v| *v <= 1.0)
         .map(|t| {
-            let x = 3.0 * c[0] * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * c[2] * t * t * (1.0 - t) + t * t * t;
-            let y = 3.0 * c[1] * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * c[3] * t * t * (1.0 - t) + t * t * t;
+            let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
+                + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
+            let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
+                + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
 
             (x, y)
         })
