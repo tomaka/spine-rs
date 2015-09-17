@@ -20,8 +20,5 @@ serde_macros = "*"
 [dependencies.color]
 git = "https://github.com/bjz/color-rs.git"
 
-[dependencies.from_json]
-git = "https://github.com/tomaka/from_json"
-
 [dev-dependencies]
 clock_ticks = "0.0"

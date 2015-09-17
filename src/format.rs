@@ -300,32 +300,4 @@ mod test {
                 timeline.translate.unwrap().len() == 3);
     }
 
-    // #[test]
-    // fn test_attachment_type() {
-    //     let txt = "{ \"region\" }";
-    //     let se: AttachmentType = serde_json::from_str(&txt).unwrap();
-    //     match se {
-    //         AttachmentType::Region => (),
-    //         _ => panic!("{}", "wrong attachment type")
-    //     }
-    // }
-    //
-    // #[test]
-    // fn test_curve() {
-    //     let txt = "{ \"linear\" }";
-    //     let se: Curve = serde_json::from_str(&txt).unwrap();
-    //     match se {
-    //         Curve::Linear => (),
-    //         _ => panic!("{}", "curve should be linear")
-    //     };
-    //
-    //     let txt = "[ 0.1 0.2 0.3 0.4 ]";
-    //     let se: Curve = serde_json::from_str(&txt).unwrap();
-    //
-    //     match se {
-    //         Curve::Bezier(_, _, _, _) => (),
-    //         _ => panic!("{}", "curve should be bezier")
-    //     }
-    // }
-
 }
