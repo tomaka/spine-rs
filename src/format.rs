@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 // use serde::de::{Deserialize, Deserializer, Error, Visitor, SeqVisitor};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Document {
     pub bones: Option<Vec<Bone>>,
     pub slots: Option<Vec<Slot>>,
@@ -12,7 +12,7 @@ pub struct Document {
     pub animations: Option<HashMap<String, Animation>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Bone {
     pub name: String,
     pub parent: Option<String>,
@@ -24,7 +24,7 @@ pub struct Bone {
     pub rotation: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Slot {
     pub name: String,
     pub bone: String,
@@ -32,7 +32,7 @@ pub struct Slot {
     pub attachment: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Attachment {
     pub name: Option<String>,
     #[serde(alias="type")]
@@ -49,9 +49,7 @@ pub struct Attachment {
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 
-pub type AttachmentType = String;
-
-// #[derive(Serialize, Deserialize, Debug, Clone)]
+// #[derive(Deserialize, Debug, Clone)]
 // pub enum AttachmentType {
 //     Region,
 //     RegionSequence,
@@ -74,7 +72,7 @@ pub type AttachmentType = String;
 //     }
 // }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Event {
     pub name: String,
     #[serde(alias="int")]
@@ -84,7 +82,7 @@ pub struct Event {
     pub string: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Animation {
     pub bones: Option<HashMap<String, BoneTimeline>>,
     pub slots: Option<HashMap<String, SlotTimeline>>,
@@ -92,14 +90,14 @@ pub struct Animation {
     pub draworder: Option<Vec<DrawOrderTimeline>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct BoneTimeline {
     pub translate: Option<Vec<BoneTranslateTimeline>>,
     pub rotate: Option<Vec<BoneRotateTimeline>>,
     pub scale: Option<Vec<BoneScaleTimeline>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct BoneTranslateTimeline {
     pub time: f64,
     pub curve: Option<TimelineCurve>,
@@ -109,14 +107,14 @@ pub struct BoneTranslateTimeline {
 
 pub type TimelineCurve = ::serde_json::Value;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct BoneRotateTimeline {
     pub time: f64,
     pub curve: Option<TimelineCurve>,
     pub angle: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct BoneScaleTimeline {
     pub time: f64,
     pub curve: Option<TimelineCurve>,
@@ -124,7 +122,7 @@ pub struct BoneScaleTimeline {
     pub y: Option<f64>,
 }
 
-// #[derive(Serialize, Debug, Clone, PartialEq)]
+// #[derive(Debug, Clone, PartialEq)]
 // pub enum TimelineCurve {
 //     CurveBezier(Vec<f64>),
 //     CurvePredefined(String),
@@ -164,26 +162,26 @@ pub struct BoneScaleTimeline {
 //     }
 // }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct SlotTimeline {
     pub attachment: Option<Vec<SlotAttachmentTimeline>>,
     pub color: Option<Vec<SlotColorTimeline>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct SlotAttachmentTimeline {
     pub time: f64,
     pub name: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct SlotColorTimeline {
     pub time: f64,
     pub color: Option<String>,
     pub curve: Option<TimelineCurve>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct EventKeyframe {
     time: f64,
     name: String,
@@ -195,13 +193,13 @@ pub struct EventKeyframe {
     string_: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct DrawOrderTimeline {
     time: f64,
     offsets: Option<Vec<DrawOrderTimelineOffset>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct DrawOrderTimelineOffset {
     slot: String,
     offset: i32,
