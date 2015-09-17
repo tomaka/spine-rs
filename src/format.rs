@@ -2,7 +2,7 @@
 #![allow(non_snake_case)]
 
 use std::collections::HashMap;
-// use serde::de::{Deserialize, Deserializer, Error, Visitor, SeqVisitor};
+use serde::de::{Deserialize, Deserializer, Error, Visitor, SeqVisitor};
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Document {
@@ -49,28 +49,37 @@ pub struct Attachment {
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 
-// #[derive(Deserialize, Debug, Clone)]
-// pub enum AttachmentType {
-//     Region,
-//     RegionSequence,
-//     BoundingBox,
-// }
+#[derive(Debug, Clone)]
+pub enum AttachmentType {
+    Region,
+    RegionSequence,
+    BoundingBox,
+}
 
-//
-// impl from_json::FromJson for AttachmentType {
-//     fn from_json(input: &from_json::Json) -> Result<AttachmentType, from_json::FromJsonError> {
-//         use from_json::FromJson;
-//
-//         let string: String = try!(FromJson::from_json(input));
-//
-//         match &string[..] {
-//             "region" => Ok(AttachmentType::Region),
-//             "regionsequence" => Ok(AttachmentType::RegionSequence),
-//             "boundingbox" => Ok(AttachmentType::BoundingBox),
-//             _ => Err(from_json::FromJsonError::ExpectError("AttachmentType", input.clone()))
-//         }
-//     }
-// }
+impl Deserialize for AttachmentType {
+
+    #[inline]
+    fn deserialize<D>(deserializer: &mut D) -> Result<AttachmentType, D::Error>
+        where D: Deserializer
+    {
+        struct AttachmentTypeVisitor;
+
+        impl Visitor for AttachmentTypeVisitor {
+            type Value = AttachmentType;
+
+            fn visit_str<E>(&mut self, value: &str) -> Result<AttachmentType, E> where E: Error {
+                match value {
+                    "region" => Ok(AttachmentType::Region),
+                    "regionsequence" => Ok(AttachmentType::RegionSequence),
+                    "boundingbox" => Ok(AttachmentType::BoundingBox),
+                    _ => Err(Error::unknown_field(value)),
+                }
+            }
+        }
+
+        deserializer.visit(AttachmentTypeVisitor)
+    }
+}
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Event {
@@ -121,33 +130,6 @@ pub struct BoneScaleTimeline {
     pub x: Option<f64>,
     pub y: Option<f64>,
 }
-
-// #[derive(Debug, Clone, PartialEq)]
-// pub enum TimelineCurve {
-//     CurveBezier(Vec<f64>),
-//     CurvePredefined(String),
-// }
-//
-// struct TimelineCurveVisitor;
-//
-// impl Visitor for TimelineCurveVisitor {
-//     type Value = TimelineCurve;
-//
-//     fn visit_str<E: Error>(&mut self, value: &str) -> Result<TimelineCurve, E> {
-//         Ok(TimelineCurve::CurvePredefined(value.to_string()))
-//     }
-//
-//     fn visit_seq<V: SeqVisitor>(&mut self, mut visitor: V) -> Result<TimelineCurve, V::Error> {
-//         visitor.visit().map(|v| TimelineCurve::CurveBezier(v))
-//     }
-// }
-//
-// impl Deserialize for TimelineCurve {
-//     fn deserialize<D: Deserializer>(deserializer: &mut D) -> Result<Self, D::Error> {
-//         deserializer.visit(TimelineCurveVisitor)
-//     }
-// }
-
 
 //
 // impl from_json::FromJson for TimelineCurve {
@@ -269,6 +251,16 @@ mod test {
 
         assert!(timeline.rotate.unwrap().len() == 4 &&
                 timeline.translate.unwrap().len() == 3);
+    }
+
+    #[test]
+    fn test_attachment_type() {
+        let txt = "{ \"region\" }";
+        let se: AttachmentType = serde_json::from_str(&txt).unwrap();
+        match se {
+            AttachmentType::Region => (),
+            _ => panic!("{}", "wrong attachment type")   
+        }
     }
 
 }
