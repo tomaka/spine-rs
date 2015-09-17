@@ -1,8 +1,10 @@
+#![feature(test)] 
+
 extern crate spine;
 extern crate test;
 extern crate clock_ticks;
 
-use std::old_io::BufReader;
+use std::io::BufReader;
 
 #[bench]
 fn loading(bencher: &mut test::Bencher) {
