@@ -330,8 +330,7 @@ impl SpineDocument {
             if let Some(anim_slots) = animation.slots.as_ref() {
                 for (slot_name, timelines) in anim_slots.iter() {
                     // calculating the variation from the animation
-                    let (anim_color, anim_attach) =
-                        try!(timelines_to_slotdata(timelines, elapsed));
+                    let (anim_color, anim_attach) = timelines_to_slotdata(timelines, elapsed);
 
                     // adding this to the `slots` vec above
                     match slots.iter_mut().find(|&&mut (s, _, _, _)| s == slot_name) {
@@ -614,51 +613,25 @@ fn calculate_curve(formula: &format::Curve, from: f32, to: f32,
 }
 
 /// Builds the color and attachment corresponding to a slot timeline.
-fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
-    -> Result<(Option<&str>, Option<&str>), CalculationError>
+fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32) -> (Option<&str>, Option<&str>)
 {
     // calculating the attachment
-    let attachment = if let Some(timeline) = timeline.attachment.as_ref() {
-        // finding in which interval we are
-        match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
-        {
-            Some((ref before, _)) => {
-                before.name.as_ref().map(|e| &e[..])
-            },
-            None => {
-                // we didn't find an interval, assuming we are past the end
-                timeline.last().and_then(|t| (t.name.as_ref().map(|e| &e[..])))
-            }
-        }
+    let attachment = timeline.attachment.as_ref().and_then(|timeline|
+        timeline.windows(2)
+                 // finding in which interval we are
+                 .find(|&w| w[0].time as f32 <= elapsed && elapsed < w[1].time as f32)
+                 .map(|ref w| &*w[0].name)
+                 .or_else(|| timeline.last().map(|ref t| &*t.name))
+    );
 
-    } else {
-        // we have no timeline
-        None
-    };
-
-
-    // calculating the color
-    let color = if let Some(timeline) = timeline.color.as_ref() {
-        // finding in which interval we are
-        match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
-        {
-            Some((ref before, _)) => {
-                before.color.as_ref().map(|e| &e[..])
-            },
-            None => {
-                // we didn't find an interval, assuming we are past the end
-                timeline.last().and_then(|t| (t.color.as_ref().map(|e| &e[..])))
-            }
-        }
-
-    } else {
-        // we have no timeline
-        None
-    };
-
+    let color = timeline.color.as_ref().and_then(|timeline|
+        timeline.windows(2)
+                 // finding in which interval we are
+                 .find(|&w| w[0].time as f32 <= elapsed && elapsed < w[1].time as f32)
+                 .map(|ref w| &*w[0].color)
+                 .or_else(|| timeline.last().map(|ref t| &*t.color))
+    );
 
     // returning
-    Ok((color, attachment))
+    (color, attachment)
 }

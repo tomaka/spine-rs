@@ -214,13 +214,13 @@ pub struct SlotTimeline {
 #[derive(Deserialize, Debug, Clone)]
 pub struct SlotAttachmentTimeline {
     pub time: f64,
-    pub name: Option<String>,
+    pub name: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct SlotColorTimeline {
     pub time: f64,
-    pub color: Option<String>,
+    pub color: String,
     #[serde(default)]
     pub curve: Curve,
 }
@@ -229,10 +229,10 @@ pub struct SlotColorTimeline {
 pub struct EventKeyframe {
     time: f64,
     name: String,
-    #[serde(alias="int")]
-    int_: Option<i32>,
-    #[serde(alias="float")]
-    float_: Option<f64>,
+    #[serde(alias="int", default)]
+    int_: i32,
+    #[serde(alias="float", default)]
+    float_: f64,
     #[serde(alias="string")]
     string_: Option<String>,
 }
