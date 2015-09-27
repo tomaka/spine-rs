@@ -91,6 +91,8 @@ use std::collections::HashMap;
 /// Spine document loaded in memory.
 pub struct SpineDocument {
     source: format::Document,
+    /// Ordered indexes of bones, starting from root
+    sorted_bones_idx: Vec<usize>,
 }
 
 /// Animation with precomputed data
@@ -130,8 +132,31 @@ impl SpineDocument {
         let document: format::Document =
             try!(serde_json::from_reader(reader).map_err(|e| format!("{:?}", e)));
 
+        let bone_count = document.bones.len();
+        let mut sorted_bones_idx = Vec::with_capacity(bone_count);
+        loop {
+            let ordered_count = sorted_bones_idx.len();
+            if ordered_count == bone_count {
+                break;
+            }
+            for (i, b) in document.bones.iter().enumerate() {
+                if !sorted_bones_idx.contains(&i) {
+                    match b.parent {
+                        Some(ref p) => {
+                            if sorted_bones_idx.iter().rev().any(|&j| &document.bones[j].name == p) {
+                                sorted_bones_idx.push(i);
+                            }
+                        }
+                        None => sorted_bones_idx.push(i)
+                    }
+                }
+            }
+            assert!(ordered_count < sorted_bones_idx.len()); // prevent infinite loop
+        }
+
         Ok(SpineDocument {
-            source: document
+            source: document,
+            sorted_bones_idx: sorted_bones_idx
         })
     }
 
@@ -141,10 +166,10 @@ impl SpineDocument {
             .map(|(name, animation)| (name as &str, AnimationData::new(animation))).collect()
     }
 
-    // /// Returns the list of all animations in this document.
-    // pub fn get_animations_list(&self) -> Vec<&str> {
-    //     self.source.animations.keys().map(|e| &e[..]).collect()
-    // }
+    /// Returns the list of all animations in this document.
+    pub fn get_animations_list(&self) -> Vec<&str> {
+        self.source.animations.keys().map(|e| &e[..]).collect()
+    }
 
     /// Returns the list of all skins in this document.
     pub fn get_skins_list(&self) -> Vec<&str> {
@@ -198,134 +223,96 @@ impl SpineDocument {
             elapsed
         };
 
+        // getting a reference to the `format::Animation`
+        let animation = animation.map(|ref animation_data| animation_data.animation);
+
+        // iterate all the bones in sorted order (root first etc ... )
+        // this ensures parent calculations are done before children's
+        let mut bone_matrices = Vec::with_capacity(self.sorted_bones_idx.len());
+        for (i, b) in self.sorted_bones_idx.iter().map(|&k| &self.source.bones[k]).enumerate() {
+
+            let mut bone_data = get_bone_default_local_setup(&b);
+
+            // if we are animating, adding to the default pose the calculations from the animation
+            if let Some(animation) = animation {
+                if let Some(timelines) = animation.bones.get(&b.name) {
+                    let anim_data = try!(timelines_to_bonedata(timelines, elapsed));
+                    bone_data = bone_data + anim_data;
+                }
+            }
+
+            // add parent data (already computed)
+            let mut bone_matrix = bone_data.to_matrix();
+            if let Some(ref p) = b.parent {
+                // search parent index (reversely)
+                let j = try!(self.sorted_bones_idx[..i].iter().enumerate().rev()
+                        .find(|&(_, &k)| self.source.bones[k].name == *p)
+                        .map(|(j, _)|j).ok_or(CalculationError::UnknownCurveFunction(format!("can't find parent {}", p))));
+                bone_matrix = bone_matrix * bone_matrices[j]
+            }
+
+            bone_matrices.push(bone_matrix);
+        }
+
         // getting a reference to the `format::Skin`
         let skin = try!(self.source.skins.get(skin).ok_or(CalculationError::SkinNotFound));
 
         // getting a reference to "default" skin
         let default_skin = try!(self.source.skins.get("default").ok_or(CalculationError::SkinNotFound));
 
-        // getting a reference to the `format::Animation`
-        let animation = animation.map(|ref animation_data| animation_data.animation);
+        let mut sprites = Vec::new();
+        for slot in self.source.slots.iter() {
 
-        // calculating the default pose of all bones
-        let mut bones: Vec<(&format::Bone, BoneData)> = self.source.bones.iter()
-            .map(|bone| (bone, get_bone_default_local_setup(bone))).collect();
+            // bone matrix
+            let mut matrix = bone_matrices[try!(self.sorted_bones_idx.iter().enumerate()
+                .find(|&(_, &idx)|self.source.bones[idx].name == slot.bone)
+                .map(|(i, _)| i)
+                .ok_or(CalculationError::BoneNotFound(&slot.bone)))];
 
-        // if we are animating, adding to the default pose the calculations from the animation
-        if let Some(animation) = animation {
-            for (bone_name, timelines) in animation.bones.iter() {
-                // calculating the variation from the animation
-                let anim_data = try!(timelines_to_bonedata(timelines, elapsed));
-
-                // adding this to the `bones` vec above
-                if let Some(&mut (_, ref mut data)) =
-                        bones.iter_mut().find(|&&mut (b, _)| b.name == *bone_name) {
-                    *data = data.clone() + anim_data;
-                };
-            }
-        };
-
-        // now we have our list of bones with their relative positions
-        // adding the position of the parent to each bone
-        let bones: Vec<(&str, Matrix4<f32>)> = bones.iter().map(|&(ref bone, ref relative_data)| {
-            let mut current_matrix = relative_data.to_matrix();
-            let mut current_parent = bone.parent.as_ref();
-
-            loop {
-                if let Some(parent_name) = current_parent {
-                    assert!(parent_name != &bone.name);     // prevent infinite loop
-
-                    match bones.iter().find(|&&(b, _)| b.name == *parent_name) {
-                        Some(ref p) => {
-                            current_parent = p.0.parent.as_ref();
-                            current_matrix = p.1.to_matrix() * current_matrix;
-                        },
-                        None => {
-                            current_parent = None;  // TODO: return BoneNotFound(parent_name);
-                        }
-                    }
-
-                } else {
-                    break
+            // if we are animating, replacing the values by the ones overridden by the animation
+            let (mut color, mut attachment) = (slot.color.as_ref().map(|ref e| &e[..]),
+                                               slot.attachment.as_ref().map(|ref e| &e[..]));
+            if let Some(animation) = animation {
+                for (_, timelines) in animation.slots.iter().filter(|&(name, _)| *name == slot.name) {
+                    // calculating the variation from the animation
+                    let (anim_color, anim_attach) = timelines_to_slotdata(timelines, elapsed);
+                    if let Some(c) = anim_color { color = Some(c) };
+                    if let Some(a) = anim_attach { attachment = Some(a) };
                 }
             }
 
-            (&bone.name[..], current_matrix.clone())
+            // now finding the attachment of each slot
+            if let Some(attach_name) = attachment {
 
-        }).collect();
+                if let Some((_, skin_attach)) = skin.iter().chain(default_skin.iter())
+                                               .find(|&(skin_slot, _)| *skin_slot == slot.name)
+                {
+                    let attachment = try!(skin_attach.iter()
+                        .find(|&(a, _)| *a == attach_name)
+                        .map(|(_, att)| att)
+                        .ok_or(CalculationError::AttachmentNotFound(attach_name)));
 
-        // now taking each slot in the document and matching its bone
-        // `slots` contains the slot name, bone data, color, and attachment
-        let mut slots: Vec<(&str, Matrix4<f32>, Option<&str>, Option<&str>)> ={
-            let mut result = Vec::new();
+                    let attachment_transform = get_attachment_transformation(attachment);
+                    matrix = matrix * attachment_transform;
 
-            for slot in self.source.slots.iter() {
-                let bone = try!(bones.iter().find(|&&(name, _)| name == slot.bone)
-                    .ok_or(CalculationError::BoneNotFound(&slot.bone)));
-                result.push((&slot.name[..], bone.1, slot.color.as_ref()
-                    .map(|s| &s[..]), slot.attachment.as_ref().map(|s| &s[..])))
-            }
-
-            result
-        };
-
-        // if we are animating, replacing the values by the ones overridden by the animation
-        if let Some(animation) = animation {
-            for (slot_name, timelines) in animation.slots.iter() {
-                // calculating the variation from the animation
-                let (anim_color, anim_attach) = timelines_to_slotdata(timelines, elapsed);
-
-                // adding this to the `slots` vec above
-                match slots.iter_mut().find(|&&mut (s, _, _, _)| s == slot_name) {
-                    Some(&mut (_, _, ref mut color, ref mut attachment)) => {
-                        if let Some(c) = anim_color { *color = Some(c) };
-                        if let Some(a) = anim_attach { *attachment = Some(a) };
-                    },
-                    None => ()
-                };
-            }
-        };
-
-        // now finding the attachment of each slot
-        let slots = {
-            let mut results = Vec::new();
-
-            for (slot_name, bone_data, _color, attachment) in slots.into_iter() {
-                if let Some(attachment) = attachment {
-                    let attachments = match skin.iter().chain(default_skin.iter())
-                                                .find(|&(slot, _)| slot == slot_name)
-                    {
-                        Some(a) => a,
-                        None => continue
-                    };
-
-                    let attachment = try!(attachments.1.iter()
-                        .find(|&(a, _)| a == attachment)
-                        .ok_or(CalculationError::AttachmentNotFound(attachment)));
-
-                    let attachment_transform = get_attachment_transformation(attachment.1);
-                    let bone_data = bone_data * attachment_transform;
-
-                    let attachment = if let Some(ref name) = attachment.1.name {
+                    let attach_name = if let Some(ref name) = attachment.name {
                         &name[..]
                     } else {
-                        &attachment.0[..]
+                        &attach_name[..]
                     };
 
-                    results.push((
-                        attachment,
-                        bone_data,
+                    sprites.push((
+                        attach_name,
+                        matrix,
                         Rgba { a: 255, c: Rgb::new(255, 255, 255) }
                     ));
                 }
             }
-
-            results
-        };
+        }
 
         // final result
         Ok(Calculation {
-            sprites: slots
+            sprites: sprites
         })
     }
 }
