@@ -114,7 +114,7 @@ impl<'a> AnimationData<'a> {
             timelines.attachment.iter().flat_map(|attachment| attachment.iter().map(|e| e.time))
             .chain(timelines.color.iter().flat_map(|color| color.iter().map(|e| e.time)))
         }))
-        .fold(0.0, f32::max) as f32;
+        .fold(0.0, f32::max);
 
         AnimationData {
             animation: animation,
@@ -141,10 +141,10 @@ impl SpineDocument {
             .map(|(name, animation)| (name as &str, AnimationData::new(animation))).collect()
     }
 
-    /// Returns the list of all animations in this document.
-    pub fn get_animations_list(&self) -> Vec<&str> {
-        self.source.animations.keys().map(|e| &e[..]).collect()
-    }
+    // /// Returns the list of all animations in this document.
+    // pub fn get_animations_list(&self) -> Vec<&str> {
+    //     self.source.animations.keys().map(|e| &e[..]).collect()
+    // }
 
     /// Returns the list of all skins in this document.
     pub fn get_skins_list(&self) -> Vec<&str> {
@@ -165,7 +165,8 @@ impl SpineDocument {
     ///
     /// The purpose of this function is to allow you to preload what you need.
     pub fn get_possible_sprites(&self) -> Vec<&str> {
-        let mut result = self.source.skins.iter().flat_map(|(_, skin)| skin.iter())
+        let mut result = self.source.skins.iter()
+                             .flat_map(|(_, skin)| skin.iter())
                              .flat_map(|(_, slot)| slot.iter())
                              .map(|(name, vals)| {
                                  if let Some(ref name) = vals.name {
@@ -217,9 +218,9 @@ impl SpineDocument {
                 let anim_data = try!(timelines_to_bonedata(timelines, elapsed));
 
                 // adding this to the `bones` vec above
-                match bones.iter_mut().find(|&&mut (b, _)| b.name == *bone_name) {
-                    Some(&mut (_, ref mut data)) => { *data = data.clone() + anim_data; },
-                    None => ()
+                if let Some(&mut (_, ref mut data)) =
+                        bones.iter_mut().find(|&&mut (b, _)| b.name == *bone_name) {
+                    *data = data.clone() + anim_data;
                 };
             }
         };
@@ -411,7 +412,7 @@ fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
     BoneData {
         position: (bone.x , bone.y),
         rotation: bone.rotation,
-        scale: (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32),
+        scale: (bone.scaleX.unwrap_or(1.0), bone.scaleY.unwrap_or(1.0)),
     }
 }
 
@@ -421,8 +422,8 @@ fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32
         position: (attachment.x, attachment.y),
         rotation: attachment.rotation,
         scale: (
-            attachment.scaleX.unwrap_or(1.0) as f32 * attachment.width / 2.0,
-            attachment.scaleY.unwrap_or(1.0) as f32 * attachment.height / 2.0
+            attachment.scaleX.unwrap_or(1.0) * attachment.width / 2.0,
+            attachment.scaleY.unwrap_or(1.0) * attachment.height / 2.0
         ),
     }.to_matrix()
 }
@@ -431,38 +432,30 @@ fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32
 fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<BoneData, CalculationError> {
 
     // calculating the current position
-    // finding in which interval we are
-    let position = match timeline.translate.iter().zip(timeline.translate.iter().skip(1))
-        .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
+    let position = match timeline.translate.windows(2).find(|&w| elapsed >= w[0].time && elapsed < w[0].time)
     {
-        Some((ref before, ref after)) => {
+        Some(ref w) => {
             // calculating the value using the curve function
-            let position = (elapsed - (before.time)) / ((after.time - before.time) as f32);
-
+            let position = (elapsed - w[0].time) / (w[1].time - w[0].time);
             (
-                try!(calculate_curve(&before.curve, before.x,
-                    after.x, position)),
-                try!(calculate_curve(&before.curve, before.y,
-                    after.y, position))
+                try!(calculate_curve(&w[0].curve, w[0].x, w[1].x, position)),
+                try!(calculate_curve(&w[0].curve, w[0].y, w[1].y, position))
             )
         },
         None => {
             // we didn't find an interval, assuming we are past the end
-            timeline.translate.last().map(|t| (t.x, t.y))
-                .unwrap_or((0.0, 0.0))
+            timeline.translate.last().map(|t| (t.x, t.y)).unwrap_or((0.0, 0.0))
         }
     };
 
 
     // calculating the current rotation
-    // finding in which interval we are
-    let rotation = match timeline.rotate.iter().zip(timeline.rotate.iter().skip(1))
-        .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
+    let rotation = match timeline.rotate.windows(2).find(|&w| elapsed >= w[0].time && elapsed < w[0].time)
     {
-        Some((ref before, ref after)) => {
+        Some(ref w) => {
             // calculating the value using the curve function
-            let position = (elapsed - (before.time)) / ((after.time - before.time) as f32);
-            try!(calculate_curve(&before.curve, before.angle, after.angle, position))
+            let position = (elapsed - w[0].time) / (w[1].time - w[0].time);
+            try!(calculate_curve(&w[0].curve, w[0].angle, w[1].angle, position))
         },
         None => {
             // we didn't find an interval, assuming we are past the end
@@ -472,24 +465,19 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 
     // calculating the current scale
     // finding in which interval we are
-    let scale = match timeline.scale.iter().zip(timeline.scale.iter().skip(1))
-        .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
+    let scale = match timeline.scale.windows(2).find(|&w| elapsed >= w[0].time && elapsed < w[0].time)
     {
-        Some((ref before, ref after)) => {
+        Some(ref w) => {
             // calculating the value using the curve function
-            let position = (elapsed - (before.time)) / ((after.time - before.time) as f32);
-
+            let position = (elapsed - w[0].time) / (w[1].time - w[0].time);
             (
-                try!(calculate_curve(&before.curve, before.x.unwrap_or(1.0) as f32,
-                    after.x.unwrap_or(1.0) as f32, position)),
-                try!(calculate_curve(&before.curve, before.y.unwrap_or(1.0) as f32,
-                    after.y.unwrap_or(1.0) as f32, position))
+                try!(calculate_curve(&w[0].curve, w[0].x.unwrap_or(1.0), w[1].x.unwrap_or(1.0), position)),
+                try!(calculate_curve(&w[0].curve, w[0].y.unwrap_or(1.0), w[1].y.unwrap_or(1.0), position))
             )
         },
         None => {
             // we didn't find an interval, assuming we are past the end
-            timeline.scale.last().map(|t| (t.x.unwrap_or(1.0) as f32, t.y.unwrap_or(1.0) as f32))
-                .unwrap_or((1.0, 1.0))
+            timeline.scale.last().map(|t| (t.x.unwrap_or(1.0), t.y.unwrap_or(1.0))).unwrap_or((1.0, 1.0))
         }
     };
 
