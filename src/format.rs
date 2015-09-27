@@ -6,10 +6,14 @@ use serde::de::{Deserialize, Deserializer, Error, Visitor, SeqVisitor};
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Document {
-    pub bones: Option<Vec<Bone>>,
-    pub slots: Option<Vec<Slot>>,
-    pub skins: Option<HashMap<String, HashMap<String, HashMap<String, Attachment>>>>,
-    pub animations: Option<HashMap<String, Animation>>,
+    #[serde(default)]
+    pub bones: Vec<Bone>,
+    #[serde(default)]
+    pub slots: Vec<Slot>,
+    #[serde(default)]
+    pub skins: HashMap<String, HashMap<String, HashMap<String, Attachment>>>,
+    #[serde(default)]
+    pub animations: HashMap<String, Animation>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -17,15 +21,15 @@ pub struct Bone {
     pub name: String,
     pub parent: Option<String>,
     #[serde(default)]
-    pub length: f64,
+    pub length: f32,
     #[serde(default)]
-    pub x: f64,
+    pub x: f32,
     #[serde(default)]
-    pub y: f64,
-    pub scaleX: Option<f64>,
-    pub scaleY: Option<f64>,
+    pub y: f32,
+    pub scaleX: Option<f32>,
+    pub scaleY: Option<f32>,
     #[serde(default)]
-    pub rotation: f64,
+    pub rotation: f32,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -42,19 +46,19 @@ pub struct Attachment {
     #[serde(default, alias="type")]
     pub type_: AttachmentType,
     #[serde(default)]
-    pub x: f64,
+    pub x: f32,
     #[serde(default)]
-    pub y: f64,
-    pub scaleX: Option<f64>,
-    pub scaleY: Option<f64>,
+    pub y: f32,
+    pub scaleX: Option<f32>,
+    pub scaleY: Option<f32>,
     #[serde(default)]
-    pub rotation: f64,
+    pub rotation: f32,
     #[serde(default)]
-    pub width: f64,
+    pub width: f32,
     #[serde(default)]
-    pub height: f64,
-    pub fps: Option<f64>,
-    pub mode: Option<f64>,
+    pub height: f32,
+    pub fps: Option<f32>,
+    pub mode: Option<f32>,
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 
@@ -102,41 +106,48 @@ pub struct Event {
     #[serde(alias="int", default)]
     pub int_: i32,
     #[serde(alias="float", default)]
-    pub float_: f64,
+    pub float_: f32,
     pub string: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Animation {
-    pub bones: Option<HashMap<String, BoneTimeline>>,
-    pub slots: Option<HashMap<String, SlotTimeline>>,
-    pub events: Option<Vec<EventKeyframe>>,
-    pub draworder: Option<Vec<DrawOrderTimeline>>,
+    #[serde(default)]
+    pub bones: HashMap<String, BoneTimeline>,
+    #[serde(default)]
+    pub slots: HashMap<String, SlotTimeline>,
+    #[serde(default)]
+    pub events: Vec<EventKeyframe>,
+    #[serde(default)]
+    pub draworder: Vec<DrawOrderTimeline>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneTimeline {
-    pub translate: Option<Vec<BoneTranslateTimeline>>,
-    pub rotate: Option<Vec<BoneRotateTimeline>>,
-    pub scale: Option<Vec<BoneScaleTimeline>>,
+    #[serde(default)]
+    pub translate: Vec<BoneTranslateTimeline>,
+    #[serde(default)]
+    pub rotate: Vec<BoneRotateTimeline>,
+    #[serde(default)]
+    pub scale: Vec<BoneScaleTimeline>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneTranslateTimeline {
-    pub time: f64,
+    pub time: f32,
     #[serde(default)]
     pub curve: Curve,
     #[serde(default)]
-    pub x: f64,
+    pub x: f32,
     #[serde(default)]
-    pub y: f64,
+    pub y: f32,
 }
 
 #[derive(Debug, Clone)]
 pub enum Curve {
     Linear,
     Stepped,
-    Bezier(f64, f64, f64, f64)
+    Bezier(f32, f32, f32, f32)
 }
 
 impl Default for Curve {
@@ -168,10 +179,10 @@ impl Deserialize for Curve {
                 where V: SeqVisitor
             {
                 // bezier curve: 4 elements only
-                let cx1: Option<f64> = try!(_visitor.visit());
-                let cy1: Option<f64> = try!(_visitor.visit());
-                let cx2: Option<f64> = try!(_visitor.visit());
-                let cy2: Option<f64> = try!(_visitor.visit());
+                let cx1: Option<f32> = try!(_visitor.visit());
+                let cy1: Option<f32> = try!(_visitor.visit());
+                let cx2: Option<f32> = try!(_visitor.visit());
+                let cy2: Option<f32> = try!(_visitor.visit());
                 try!(_visitor.end());
 
                 match (cx1, cy1, cx2, cy2) {
@@ -186,23 +197,22 @@ impl Deserialize for Curve {
     }
 }
 
-
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneRotateTimeline {
-    pub time: f64,
+    pub time: f32,
     #[serde(default)]
     pub curve: Curve,
     #[serde(default)]
-    pub angle: f64,
+    pub angle: f32,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct BoneScaleTimeline {
-    pub time: f64,
+    pub time: f32,
     #[serde(default)]
     pub curve: Curve,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -213,13 +223,13 @@ pub struct SlotTimeline {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct SlotAttachmentTimeline {
-    pub time: f64,
+    pub time: f32,
     pub name: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct SlotColorTimeline {
-    pub time: f64,
+    pub time: f32,
     pub color: String,
     #[serde(default)]
     pub curve: Curve,
@@ -227,19 +237,19 @@ pub struct SlotColorTimeline {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct EventKeyframe {
-    time: f64,
+    time: f32,
     name: String,
     #[serde(alias="int", default)]
     int_: i32,
     #[serde(alias="float", default)]
-    float_: f64,
+    float_: f32,
     #[serde(alias="string")]
     string_: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct DrawOrderTimeline {
-    time: f64,
+    time: f32,
     offsets: Option<Vec<DrawOrderTimelineOffset>>,
 }
 
@@ -308,8 +318,7 @@ mod test {
         }";
         let timeline: BoneTimeline = serde_json::from_str(&txt).unwrap();
 
-        assert!(timeline.rotate.unwrap().len() == 4 &&
-                timeline.translate.unwrap().len() == 3);
+        assert!(timeline.rotate.len() == 4 &&
+                timeline.translate.len() == 3);
     }
-
 }
