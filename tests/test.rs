@@ -5,7 +5,7 @@ use std::io::BufReader;
 #[test]
 fn animations_list() {
     let src: &[u8] = include_bytes!("example.json");
-    let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
+    let doc = spine::SpineDocument::new(BufReader::new(src)).ok().expect("cannot load example");
 
     assert!(doc.get_animations_list().get(0).unwrap() == &"walk" ||
         doc.get_animations_list().get(0).unwrap() == &"jump");

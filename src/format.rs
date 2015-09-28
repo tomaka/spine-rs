@@ -1,34 +1,38 @@
 #![allow(dead_code)]
 #![allow(non_snake_case)]
 
-use from_json;
 use std::collections::HashMap;
+use serde::de::{Deserialize, Deserializer, Error, Visitor, SeqVisitor};
 
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Document {
-    pub bones: Option<Vec<Bone>>,
-    pub slots: Option<Vec<Slot>>,
-    pub skins: Option<HashMap<String, HashMap<String, HashMap<String, Attachment>>>>,
-    pub animations: Option<HashMap<String, Animation>>,
+    #[serde(default)]
+    pub bones: Vec<Bone>,
+    #[serde(default)]
+    pub slots: Vec<Slot>,
+    #[serde(default)]
+    pub skins: HashMap<String, HashMap<String, HashMap<String, Attachment>>>,
+    #[serde(default)]
+    pub animations: HashMap<String, Animation>,
 }
 
-derive_from_json!(Document, bones, slots, skins, animations);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Bone {
     pub name: String,
     pub parent: Option<String>,
-    pub length: Option<f64>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-    pub scaleX: Option<f64>,
-    pub scaleY: Option<f64>,
-    pub rotation: Option<f64>,
+    #[serde(default)]
+    pub length: f32,
+    #[serde(default)]
+    pub x: f32,
+    #[serde(default)]
+    pub y: f32,
+    pub scaleX: Option<f32>,
+    pub scaleY: Option<f32>,
+    #[serde(default)]
+    pub rotation: f32,
 }
 
-derive_from_json!(Bone, name, parent, length, x, y, scaleX, scaleY, rotation);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Slot {
     pub name: String,
     pub bone: String,
@@ -36,26 +40,27 @@ pub struct Slot {
     pub attachment: Option<String>,
 }
 
-derive_from_json!(Slot, name, bone, color, attachment);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Attachment {
     pub name: Option<String>,
-    pub type_: Option<AttachmentType>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-    pub scaleX: Option<f64>,
-    pub scaleY: Option<f64>,
-    pub rotation: Option<f64>,
-    pub width: Option<f64>,
-    pub height: Option<f64>,
-    pub fps: Option<f64>,
-    pub mode: Option<f64>,
+    #[serde(default, alias="type")]
+    pub type_: AttachmentType,
+    #[serde(default)]
+    pub x: f32,
+    #[serde(default)]
+    pub y: f32,
+    pub scaleX: Option<f32>,
+    pub scaleY: Option<f32>,
+    #[serde(default)]
+    pub rotation: f32,
+    #[serde(default)]
+    pub width: f32,
+    #[serde(default)]
+    pub height: f32,
+    pub fps: Option<f32>,
+    pub mode: Option<f32>,
     //vertices: Option<Vec<??>>     // TODO: ?
 }
-
-derive_from_json!(Attachment, name, type_ as "type", x, y, scaleX, scaleY, rotation, width, height,
-                  fps, mode);
 
 #[derive(Debug, Clone)]
 pub enum AttachmentType {
@@ -64,146 +69,256 @@ pub enum AttachmentType {
     BoundingBox,
 }
 
-impl from_json::FromJson for AttachmentType {
-    fn from_json(input: &from_json::Json) -> Result<AttachmentType, from_json::FromJsonError> {
-        use from_json::FromJson;
-
-        let string: String = try!(FromJson::from_json(input));
-
-        match &string[..] {
-            "region" => Ok(AttachmentType::Region),
-            "regionsequence" => Ok(AttachmentType::RegionSequence),
-            "boundingbox" => Ok(AttachmentType::BoundingBox),
-            _ => Err(from_json::FromJsonError::ExpectError("AttachmentType", input.clone()))
-        }
+impl Default for AttachmentType {
+    fn default() -> AttachmentType {
+        AttachmentType::Region
     }
 }
 
-#[derive(Debug, Clone)]
+impl Deserialize for AttachmentType {
+
+    #[inline]
+    fn deserialize<D>(deserializer: &mut D) -> Result<AttachmentType, D::Error>
+        where D: Deserializer
+    {
+        struct AttachmentTypeVisitor;
+
+        impl Visitor for AttachmentTypeVisitor {
+            type Value = AttachmentType;
+
+            fn visit_str<E>(&mut self, value: &str) -> Result<AttachmentType, E> where E: Error {
+                match value {
+                    "region" => Ok(AttachmentType::Region),
+                    "regionsequence" => Ok(AttachmentType::RegionSequence),
+                    "boundingbox" => Ok(AttachmentType::BoundingBox),
+                    _ => Err(Error::unknown_field(value)),
+                }
+            }
+        }
+
+        deserializer.visit(AttachmentTypeVisitor)
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct Event {
     pub name: String,
-    pub int_: Option<i32>,
-    pub float_: Option<f64>,
+    #[serde(alias="int", default)]
+    pub int_: i32,
+    #[serde(alias="float", default)]
+    pub float_: f32,
     pub string: Option<String>,
 }
 
-derive_from_json!(Event, name, int_ as "int", float_ as "float", string);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Animation {
-    pub bones: Option<HashMap<String, BoneTimeline>>,
-    pub slots: Option<HashMap<String, SlotTimeline>>,
-    pub events: Option<Vec<EventKeyframe>>,
-    pub draworder: Option<Vec<DrawOrderTimeline>>,
+    #[serde(default)]
+    pub bones: HashMap<String, BoneTimeline>,
+    #[serde(default)]
+    pub slots: HashMap<String, SlotTimeline>,
+    #[serde(default)]
+    pub events: Vec<EventKeyframe>,
+    #[serde(default)]
+    pub draworder: Vec<DrawOrderTimeline>,
 }
 
-derive_from_json!(Animation, bones, slots, events, draworder);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct BoneTimeline {
-    pub translate: Option<Vec<BoneTranslateTimeline>>,
-    pub rotate: Option<Vec<BoneRotateTimeline>>,
-    pub scale: Option<Vec<BoneScaleTimeline>>,
+    #[serde(default)]
+    pub translate: Vec<BoneTranslateTimeline>,
+    #[serde(default)]
+    pub rotate: Vec<BoneRotateTimeline>,
+    #[serde(default)]
+    pub scale: Vec<BoneScaleTimeline>,
 }
 
-derive_from_json!(BoneTimeline, translate, rotate, scale);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct BoneTranslateTimeline {
-    pub time: f64,
-    pub curve: Option<TimelineCurve>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    pub time: f32,
+    #[serde(default)]
+    pub curve: Curve,
+    #[serde(default)]
+    pub x: f32,
+    #[serde(default)]
+    pub y: f32,
 }
-
-derive_from_json!(BoneTranslateTimeline, time, curve, x, y);
 
 #[derive(Debug, Clone)]
-pub struct BoneRotateTimeline {
-    pub time: f64,
-    pub curve: Option<TimelineCurve>,
-    pub angle: Option<f64>,
+pub enum Curve {
+    Linear,
+    Stepped,
+    Bezier(f32, f32, f32, f32)
 }
 
-derive_from_json!(BoneRotateTimeline, time, curve, angle);
-
-#[derive(Debug, Clone)]
-pub struct BoneScaleTimeline {
-    pub time: f64,
-    pub curve: Option<TimelineCurve>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-}
-
-derive_from_json!(BoneScaleTimeline, time, curve, x, y);
-
-#[derive(Debug, Clone)]
-pub enum TimelineCurve {
-    CurveBezier(Vec<f64>),
-    CurvePredefined(String),
-}
-
-impl from_json::FromJson for TimelineCurve {
-    fn from_json(input: &from_json::Json) -> Result<TimelineCurve, from_json::FromJsonError> {
-        use from_json::FromJson;
-
-        if input.is_array() {
-            Ok(TimelineCurve::CurveBezier(try!(FromJson::from_json(input))))
-        } else {
-            Ok(TimelineCurve::CurvePredefined(try!(FromJson::from_json(input))))
-        }
+impl Default for Curve {
+    fn default() -> Curve {
+        Curve::Linear
     }
 }
 
-#[derive(Debug, Clone)]
+impl Deserialize for Curve {
+
+    #[inline]
+    fn deserialize<D>(deserializer: &mut D) -> Result<Curve, D::Error>
+        where D: Deserializer
+    {
+        struct CurveVisitor;
+
+        impl Visitor for CurveVisitor {
+            type Value = Curve;
+
+            fn visit_str<E>(&mut self, value: &str) -> Result<Curve, E> where E: Error {
+                match value {
+                    "linear" => Ok(Curve::Linear),
+                    "stepped" => Ok(Curve::Stepped),
+                    _ => Err(Error::unknown_field(value)),
+                }
+            }
+
+            fn visit_seq<V>(&mut self, mut _visitor: V) -> Result<Curve, V::Error>
+                where V: SeqVisitor
+            {
+                // bezier curve: 4 elements only
+                let cx1: Option<f32> = try!(_visitor.visit());
+                let cy1: Option<f32> = try!(_visitor.visit());
+                let cx2: Option<f32> = try!(_visitor.visit());
+                let cy2: Option<f32> = try!(_visitor.visit());
+                try!(_visitor.end());
+
+                match (cx1, cy1, cx2, cy2) {
+                    (Some(cx1), Some(cy1), Some(cx2), Some(cy2)) =>
+                        Ok(Curve::Bezier(cx1, cy1, cx2, cy2)),
+                    _ => Err(Error::unknown_field("cannot parse bezier curve")),
+                }
+            }
+        }
+
+        deserializer.visit(CurveVisitor)
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct BoneRotateTimeline {
+    pub time: f32,
+    #[serde(default)]
+    pub curve: Curve,
+    #[serde(default)]
+    pub angle: f32,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct BoneScaleTimeline {
+    pub time: f32,
+    #[serde(default)]
+    pub curve: Curve,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct SlotTimeline {
     pub attachment: Option<Vec<SlotAttachmentTimeline>>,
     pub color: Option<Vec<SlotColorTimeline>>,
 }
 
-derive_from_json!(SlotTimeline, attachment, color);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct SlotAttachmentTimeline {
-    pub time: f64,
-    pub name: Option<String>,
+    pub time: f32,
+    pub name: String,
 }
 
-derive_from_json!(SlotAttachmentTimeline, time, name);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct SlotColorTimeline {
-    pub time: f64,
-    pub color: Option<String>,
-    pub curve: Option<TimelineCurve>,
+    pub time: f32,
+    pub color: String,
+    #[serde(default)]
+    pub curve: Curve,
 }
 
-derive_from_json!(SlotColorTimeline, time, color, curve);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct EventKeyframe {
-    time: f64,
+    time: f32,
     name: String,
-    int_: Option<i32>,
-    float_: Option<f64>,
+    #[serde(alias="int", default)]
+    int_: i32,
+    #[serde(alias="float", default)]
+    float_: f32,
+    #[serde(alias="string")]
     string_: Option<String>,
 }
 
-derive_from_json!(EventKeyframe, time, name, int_ as "int", float_ as "float",
-                  string_ as "string");
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct DrawOrderTimeline {
-    time: f64,
+    time: f32,
     offsets: Option<Vec<DrawOrderTimelineOffset>>,
 }
 
-derive_from_json!(DrawOrderTimeline, time, offsets);
-
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct DrawOrderTimelineOffset {
     slot: String,
     offset: i32,
 }
 
-derive_from_json!(DrawOrderTimelineOffset, slot, offset);
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_slot() {
+        let txt = "{ \"name\": \"left shoulder\", \"bone\": \"left shoulder\", \"attachment\": \"left-shoulder\" }";
+        let slot: Slot = serde_json::from_str(&txt).unwrap();
+        assert!(slot.name == "left shoulder" &&
+                slot.bone == "left shoulder" &&
+                slot.attachment == Some("left-shoulder".to_string()) &&
+                slot.color == None);
+    }
+
+    #[test]
+    fn test_bone() {
+        let txt = "{ \"name\": \"left foot\", \"parent\": \"left lower leg\", \"length\": 46.5, \"x\": 64.02, \"y\": -8.67, \"rotation\": 102.43 }";
+        let bone: Bone = serde_json::from_str(&txt).unwrap();
+        assert!(bone.name == "left foot" &&
+                bone.parent.unwrap() == "left lower leg" &&
+                bone.length == 46.5);
+    }
+
+    #[test]
+    fn test_translation() {
+        let txt = "{ \"time\": 0, \"x\": -3, \"y\": -2.25 }";
+        let trans: BoneTranslateTimeline = serde_json::from_str(&txt).unwrap();
+        assert!(trans.time == 0.0 &&
+                trans.x == -3.0 &&
+                trans.y == -2.25);
+    }
+
+    #[test]
+    fn test_rotation() {
+        let txt = "{ \"time\": 0.1333, \"angle\": -8.78 }";
+        let rot: BoneRotateTimeline = serde_json::from_str(&txt).unwrap();
+        assert!(rot.time == 0.1333 &&
+                rot.angle == -8.78);
+    }
+
+    #[test]
+    fn test_timeline() {
+        let txt = "{
+            \"rotate\": [
+                { \"time\": 0, \"angle\": -26.55 },
+                { \"time\": 0.1333, \"angle\": -8.78 },
+                { \"time\": 0.2666, \"angle\": 9.51 },
+                { \"time\": 0.4, \"angle\": 30.74 }
+            ],
+            \"translate\": [
+                { \"time\": 0, \"x\": -3, \"y\": -2.25 },
+                { \"time\": 0.4, \"x\": -2.18, \"y\": -2.25 },
+                { \"time\": 1.0666, \"x\": -3, \"y\": -2.25 }
+            ]
+        }";
+        let timeline: BoneTimeline = serde_json::from_str(&txt).unwrap();
+
+        assert!(timeline.rotate.len() == 4 &&
+                timeline.translate.len() == 3);
+    }
+}

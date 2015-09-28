@@ -25,8 +25,8 @@ You can retreive the list of animations and skins provided a document:
 # let document: spine::SpineDocument = unsafe { std::mem::uninitialized() };
 let skins = document.get_skins_list();
 
-let animations = document.get_animations_list();
-let first_animation_duration = document.get_animation_duration(animations[0]).unwrap();
+let animations = document.get_animations();
+let some_animation_duration = animations.iter().next().map(|(_, a)| a.duration).unwrap();
 ```
 
 You can also get a list of the names of all the sprites that can possibly be drawn by this
@@ -50,7 +50,8 @@ This function takes the skin name, the animation name (or `None` for the default
 
 ```no_run
 # let document: spine::SpineDocument = unsafe { std::mem::uninitialized() };
-let results = document.calculate("default", Some("walk"), 0.176).unwrap();
+let animations = document.get_animations();
+let results = document.calculate("default", animations.get("walk"), 0.176).unwrap();
 ```
 
 The results contain the list of sprites that need to be drawn, with their matrix. The matrix
@@ -71,156 +72,138 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 
 */
 #![deny(missing_docs)]
+#![feature(custom_derive, plugin, custom_attribute, type_macros)]
+#![plugin(serde_macros)]
 
 extern crate color;
 extern crate cgmath;
-#[macro_use]
-extern crate from_json;
+extern crate serde;
+extern crate serde_json;
+
+mod format;
 
 use color::{Rgb, Rgba};
 use cgmath::Matrix4;
-
 use std::io::Read;
-
-mod format;
+use std::collections::HashMap;
 
 /// Spine document loaded in memory.
 pub struct SpineDocument {
     source: format::Document,
+    /// Ordered indexes of bones, starting from root
+    sorted_bones_idx: Vec<usize>,
+}
+
+/// Animation with precomputed data
+pub struct AnimationData<'a> {
+    animation: &'a format::Animation,
+    /// total duration of the animation
+    pub duration: f32
+}
+
+impl<'a> AnimationData<'a> {
+    /// Creates a new AnimationData
+    /// Used when iterating over HashMap
+    fn new(animation: &'a format::Animation) -> AnimationData<'a> {
+
+        let duration = animation.bones.values().flat_map(|timelines|{
+            timelines.translate.iter().map(|e| e.time)
+            .chain(timelines.rotate.iter().map(|e| e.time))
+            .chain(timelines.scale.iter().map(|e| e.time))
+        })
+        .chain(animation.slots.values().flat_map(|timelines|{
+            timelines.attachment.iter().flat_map(|attachment| attachment.iter().map(|e| e.time))
+            .chain(timelines.color.iter().flat_map(|color| color.iter().map(|e| e.time)))
+        }))
+        .fold(0.0, f32::max);
+
+        AnimationData {
+            animation: animation,
+            duration: duration
+        }
+    }
 }
 
 impl SpineDocument {
     /// Loads a document from a reader.
-    pub fn new<R: Read>(mut reader: R) -> Result<SpineDocument, String> {
-        let document = try!(from_json::Json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
-        let document: format::Document = try!(from_json::FromJson::from_json(&document)
-            .map_err(|e| format!("{:?}", e)));
+    pub fn new<R: Read>(reader: R) -> Result<SpineDocument, String> {
+
+        let document: format::Document =
+            try!(serde_json::from_reader(reader).map_err(|e| format!("{:?}", e)));
+
+        let bone_count = document.bones.len();
+        let mut sorted_bones_idx = Vec::with_capacity(bone_count);
+        loop {
+            let ordered_count = sorted_bones_idx.len();
+            if ordered_count == bone_count {
+                break;
+            }
+            for (i, b) in document.bones.iter().enumerate() {
+                if !sorted_bones_idx.contains(&i) {
+                    match b.parent {
+                        Some(ref p) => {
+                            if sorted_bones_idx.iter().rev().any(|&j| &document.bones[j].name == p) {
+                                sorted_bones_idx.push(i);
+                            }
+                        }
+                        None => sorted_bones_idx.push(i)
+                    }
+                }
+            }
+            assert!(ordered_count < sorted_bones_idx.len()); // prevent infinite loop
+        }
 
         Ok(SpineDocument {
-            source: document
+            source: document,
+            sorted_bones_idx: sorted_bones_idx
         })
+    }
+
+    /// Returns all precomputed animations in this document.
+    pub fn get_animations(&self) -> HashMap<&str, AnimationData> {
+        self.source.animations.iter()
+            .map(|(name, animation)| (name as &str, AnimationData::new(animation))).collect()
     }
 
     /// Returns the list of all animations in this document.
     pub fn get_animations_list(&self) -> Vec<&str> {
-        if let Some(ref list) = self.source.animations {
-            list.keys().map(|e| &e[..]).collect()
-        } else {
-            Vec::new()
-        }
+        self.source.animations.keys().map(|e| &e[..]).collect()
     }
 
     /// Returns the list of all skins in this document.
     pub fn get_skins_list(&self) -> Vec<&str> {
-        if let Some(ref list) = self.source.skins {
-            list.keys().map(|e| &e[..]).collect()
-        } else {
-            Vec::new()
-        }
+        self.source.skins.keys().map(|e| &e[..]).collect()
     }
 
     /// Returns true if an animation is in the document.
     pub fn has_animation(&self, name: &str) -> bool {
-        if let Some(ref list) = self.source.animations {
-            list.get(&name.to_string()).is_some()
-        } else {
-            false
-        }
+        self.source.animations.contains_key(name)
     }
 
     /// Returns true if a skin is in the document.
     pub fn has_skin(&self, name: &str) -> bool {
-        if let Some(ref list) = self.source.skins {
-            list.get(&name.to_string()).is_some()
-        } else {
-            false
-        }
-    }
-
-    /// Returns the duration of an animation.
-    ///
-    /// Returns `None` if the animation doesn't exist.
-    /// 
-    /// TODO: check events and draworder?
-    pub fn get_animation_duration(&self, animation: &str) -> Option<f32> {
-        // getting a reference to the `format::Animation`
-        let animation: &format::Animation = 
-            if let Some(anim) = self.source.animations.as_ref() {
-                match anim.get(animation) {
-                    Some(a) => a,
-                    None => return None
-                }
-            } else {
-                return None;
-            };
-
-        // this contains the final result
-        let mut result = 0.0f64;
-
-        // checking the bones
-        if let Some(ref bones) = animation.bones {
-            for timelines in bones.values() {
-                if let Some(ref translate) = timelines.translate.as_ref() {
-                    for elem in translate.iter() {
-                        if elem.time > result { result = elem.time }
-                    }
-                }
-                if let Some(ref rotate) = timelines.rotate.as_ref() {
-                    for elem in rotate.iter() {
-                        if elem.time > result { result = elem.time }
-                    }
-                }
-                if let Some(ref scale) = timelines.scale.as_ref() {
-                    for elem in scale.iter() {
-                        if elem.time > result { result = elem.time }
-                    }
-                }
-            }
-        }
-
-        // checking the slots
-        if let Some(ref slots) = animation.slots {
-            for timelines in slots.values() {
-                if let Some(ref attachment) = timelines.attachment.as_ref() {
-                    for elem in attachment.iter() {
-                        if elem.time > result { result = elem.time }
-                    }
-                }
-                if let Some(ref color) = timelines.color.as_ref() {
-                    for elem in color.iter() {
-                        if elem.time > result { result = elem.time }
-                    }
-                }
-            }
-        }
-
-        // returning
-        Some(result as f32)
+        self.source.skins.contains_key(name)
     }
 
     /// Returns a list of all possible sprites when drawing.
     ///
     /// The purpose of this function is to allow you to preload what you need.
     pub fn get_possible_sprites(&self) -> Vec<&str> {
-        if let Some(ref list) = self.source.skins {
-            let mut result = list.iter().flat_map(|(_, skin)| skin.iter())
-                                 .flat_map(|(_, slot)| slot.iter())
-                                 .map(|(name, vals)| {
-                                     if let Some(ref name) = vals.name {
-                                         &name[..]
-                                     } else {
-                                         &name[..]
-                                     }
-                                 })
-                                 .collect::<Vec<_>>();
+        let mut result = self.source.skins.iter()
+                             .flat_map(|(_, skin)| skin.iter())
+                             .flat_map(|(_, slot)| slot.iter())
+                             .map(|(name, vals)| {
+                                 if let Some(ref name) = vals.name {
+                                     &name[..]
+                                 } else {
+                                     &name[..]
+                                 }
+                             })
+                             .collect::<Vec<_>>();
 
-            result.sort();
-            result.dedup();
-            result
-
-        } else {
-            Vec::new()
-        }
+        result.sort();
+        result.dedup();
+        result
     }
 
     /// Calculates the list of sprites that must be displayed and their matrix.
@@ -229,161 +212,95 @@ impl SpineDocument {
     // TODO: implement draw order timeline
     // TODO: implement events
     // TODO: implement other attachment types
-    pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32) 
+    pub fn calculate<'a>(&'a self, skin: &str, animation: Option<&'a AnimationData<'a>>, elapsed: f32)
         -> Result<Calculation, CalculationError>
     {
         // adapting elapsed
-        if let Some(animation) = animation {
-            if let Some(duration) = self.get_animation_duration(animation) {
-                elapsed = elapsed % duration;
-            }
-        }
-        let elapsed = elapsed;
-
-        // getting a reference to the `format::Skin`
-        let skin = try!(self.source.skins.as_ref().and_then(|l| l.get(skin))
-            .ok_or(CalculationError::SkinNotFound));
-
-        // getting a reference to "default" skin
-        let default_skin = try!(self.source.skins.as_ref().and_then(|l| l.get("default"))
-            .ok_or(CalculationError::SkinNotFound));
+        let elapsed = if let Some(ref animation) = animation {
+            elapsed % animation.duration
+        } else {
+            elapsed
+        };
 
         // getting a reference to the `format::Animation`
-        let animation: Option<&format::Animation> = match animation {
-            Some(animation) => Some(try!(self.source.animations.as_ref()
-                .and_then(|l| l.get(animation)).ok_or(CalculationError::AnimationNotFound))),
-            None => None
-        };
+        let animation = animation.map(|ref animation_data| animation_data.animation);
 
-        // calculating the default pose of all bones
-        let mut bones: Vec<(&format::Bone, BoneData)> = self.source.bones.as_ref().map(|bones| {
-            bones.iter().map(|bone| (bone, get_bone_default_local_setup(bone))).collect()
-        }).unwrap_or_else(|| Vec::new());
+        // iterate all the bones in sorted order (root first etc ... )
+        // this ensures parent calculations are done before children's
+        let mut bone_matrices = Vec::with_capacity(self.sorted_bones_idx.len());
+        for (i, b) in self.sorted_bones_idx.iter().map(|&k| &self.source.bones[k]).enumerate() {
 
-        // if we are animating, adding to the default pose the calculations from the animation
-        if let Some(animation) = animation {
-            if let Some(anim_bones) = animation.bones.as_ref() {
-                for (bone_name, timelines) in anim_bones.iter() {
-                    // calculating the variation from the animation
+            let mut bone_data = get_bone_default_local_setup(&b);
+
+            // if we are animating, adding to the default pose the calculations from the animation
+            if let Some(animation) = animation {
+                if let Some(timelines) = animation.bones.get(&b.name) {
                     let anim_data = try!(timelines_to_bonedata(timelines, elapsed));
-
-                    // adding this to the `bones` vec above
-                    match bones.iter_mut().find(|&&mut (b, _)| b.name == *bone_name) {
-                        Some(&mut (_, ref mut data)) => { *data = data.clone() + anim_data; },
-                        None => ()
-                    };
+                    bone_data = bone_data + anim_data;
                 }
             }
-        };
 
-        // now we have our list of bones with their relative positions
-        // adding the position of the parent to each bone
-        let bones: Vec<(&str, Matrix4<f32>)> = bones.iter().map(|&(ref bone, ref relative_data)| {
-            let mut current_matrix = relative_data.to_matrix();
-            let mut current_parent = bone.parent.as_ref();
+            // add parent data (already computed)
+            let mut bone_matrix = bone_data.to_matrix();
+            if let Some(ref p) = b.parent {
+                // search parent index (reversely)
+                let j = i - 1 - self.sorted_bones_idx[..i].iter().rev()
+                                .position(|&k| self.source.bones[k].name == *p).unwrap();
+                bone_matrix = bone_matrix * bone_matrices[j]
+            }
 
-            loop {
-                if let Some(parent_name) = current_parent {
-                    assert!(parent_name != &bone.name);     // prevent infinite loop
+            bone_matrices.push(bone_matrix);
+        }
 
-                    match bones.iter().find(|&&(b, _)| b.name == *parent_name) {
-                        Some(ref p) => {
-                            current_parent = p.0.parent.as_ref();
-                            current_matrix = p.1.to_matrix() * current_matrix;
-                        },
-                        None => {
-                            current_parent = None;  // TODO: return BoneNotFound(parent_name);
-                        }
+        // getting a reference to the `format::Skin`
+        let skin = try!(self.source.skins.get(skin).ok_or(CalculationError::SkinNotFound));
+
+        // getting a reference to "default" skin
+        let default_skin = try!(self.source.skins.get("default").ok_or(CalculationError::SkinNotFound));
+
+        let mut sprites = Vec::new();
+        for slot in self.source.slots.iter() {
+
+            // bone matrix
+            let mut matrix = bone_matrices[try!(self.sorted_bones_idx.iter()
+                .position(|&idx|self.source.bones[idx].name == slot.bone)
+                .ok_or(CalculationError::BoneNotFound(&slot.bone)))];
+
+            // if we are animating, replacing the values by the ones overridden by the animation
+            let (mut color, mut attachment) = (slot.color.as_ref().map(|ref e| &e[..]),
+                                               slot.attachment.as_ref().map(|ref e| &e[..]));
+            if let Some(animation) = animation {
+                if let Some(timelines) = animation.slots.get(&slot.name) {
+                    // calculating the variation from the animation
+                    let (anim_color, anim_attach) = timelines_to_slotdata(timelines, elapsed);
+                    if let Some(c) = anim_color { color = Some(c) };
+                    if let Some(a) = anim_attach { attachment = Some(a) };
+                }
+            }
+
+            // now finding the attachment of each slot
+            if let Some(mut attach_name) = attachment {
+                if let Some(skin_attach) = skin.get(&slot.name).or_else(|| default_skin.get(&slot.name))
+                {
+                    let attachment = try!(skin_attach.get(attach_name)
+                        .ok_or(CalculationError::AttachmentNotFound(attach_name)));
+
+                    if let Some(ref name) = attachment.name {
+                        attach_name = &name[..];
                     }
 
-                } else {
-                    break
-                }
-            }
-
-            (&bone.name[..], current_matrix.clone())
-
-        }).collect();
-
-        // now taking each slot in the document and matching its bone
-        // `slots` contains the slot name, bone data, color, and attachment
-        let mut slots: Vec<(&str, Matrix4<f32>, Option<&str>, Option<&str>)> =
-            if let Some(slots) = self.source.slots.as_ref() {
-                let mut result = Vec::new();
-
-                for slot in slots.iter() {
-                    let bone = try!(bones.iter().find(|&&(name, _)| name == slot.bone)
-                        .ok_or(CalculationError::BoneNotFound(&slot.bone)));
-                    result.push((&slot.name[..], bone.1, slot.color.as_ref()
-                        .map(|s| &s[..]), slot.attachment.as_ref().map(|s| &s[..])))
-                }
-
-                result
-
-            } else {
-                Vec::new()
-            };
-
-        // if we are animating, replacing the values by the ones overridden by the animation
-        if let Some(animation) = animation {
-            if let Some(anim_slots) = animation.slots.as_ref() {
-                for (slot_name, timelines) in anim_slots.iter() {
-                    // calculating the variation from the animation
-                    let (anim_color, anim_attach) =
-                        try!(timelines_to_slotdata(timelines, elapsed));
-
-                    // adding this to the `slots` vec above
-                    match slots.iter_mut().find(|&&mut (s, _, _, _)| s == slot_name) {
-                        Some(&mut (_, _, ref mut color, ref mut attachment)) => {
-                            if let Some(c) = anim_color { *color = Some(c) };
-                            if let Some(a) = anim_attach { *attachment = Some(a) };
-                        },
-                        None => ()
-                    };
-                }
-            }
-        };
-
-        // now finding the attachment of each slot
-        let slots = {
-            let mut results = Vec::new();
-
-            for (slot_name, bone_data, _color, attachment) in slots.into_iter() {
-                if let Some(attachment) = attachment {
-                    let attachments = match skin.iter().chain(default_skin.iter())
-                                                .find(|&(slot, _)| slot == slot_name)
-                    {
-                        Some(a) => a,
-                        None => continue
-                    };
-
-                    let attachment = try!(attachments.1.iter()
-                        .find(|&(a, _)| a == attachment)
-                        .ok_or(CalculationError::AttachmentNotFound(attachment)));
-
-                    let attachment_transform = get_attachment_transformation(attachment.1);
-                    let bone_data = bone_data * attachment_transform;
-
-                    let attachment = if let Some(ref name) = attachment.1.name {
-                        &name[..]
-                    } else {
-                        &attachment.0[..]
-                    };
-
-                    results.push((
-                        attachment,
-                        bone_data,
+                    sprites.push((
+                        attach_name,
+                        matrix * get_attachment_transformation(attachment),
                         Rgba { a: 255, c: Rgb::new(255, 255, 255) }
                     ));
                 }
             }
-
-            results
-        };
+        }
 
         // final result
         Ok(Calculation {
-            sprites: slots
+            sprites: sprites
         })
     }
 }
@@ -442,7 +359,10 @@ impl BoneData {
     fn to_matrix(&self) -> Matrix4<f32> {
         use cgmath::{Matrix2, Vector3};
 
-        let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0, 0.0, self.scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+        let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0,
+                                        0.0, self.scale.1, 0.0, 0.0,
+                                        0.0, 0.0, 1.0, 0.0,
+                                        0.0, 0.0, 0.0, 1.0);
         let rotation_matrix = Matrix4::from(Matrix2::from_angle(cgmath::deg(self.rotation).into()));
         let translation_matrix = Matrix4::from_translation(&Vector3::new(self.position.0, self.position.1, 0.0));
 
@@ -465,112 +385,77 @@ impl std::ops::Add<BoneData> for BoneData {
 /// Returns the setup pose of a bone relative to its parent.
 fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
     BoneData {
-        position: (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
-        rotation: bone.rotation.unwrap_or(0.0) as f32,
-        scale: (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32),
+        position: (bone.x , bone.y),
+        rotation: bone.rotation,
+        scale: (bone.scaleX.unwrap_or(1.0), bone.scaleY.unwrap_or(1.0)),
     }
 }
 
 /// Returns the `Matrix` of an attachment.
 fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32> {
     BoneData {
-        position: (attachment.x.unwrap_or(0.0) as f32, attachment.y.unwrap_or(0.0) as f32),
-        rotation: attachment.rotation.unwrap_or(0.0) as f32,
+        position: (attachment.x, attachment.y),
+        rotation: attachment.rotation,
         scale: (
-            attachment.scaleX.unwrap_or(1.0) as f32 * attachment.width.unwrap_or(1.0) as f32 / 2.0,
-            attachment.scaleY.unwrap_or(1.0) as f32 * attachment.height.unwrap_or(1.0) as f32 / 2.0
+            attachment.scaleX.unwrap_or(1.0) * attachment.width / 2.0,
+            attachment.scaleY.unwrap_or(1.0) * attachment.height / 2.0
         ),
     }.to_matrix()
 }
 
 /// Builds the `Matrix4` corresponding to a timeline.
 fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<BoneData, CalculationError> {
+
     // calculating the current position
-    let position = if let Some(timeline) = timeline.translate.as_ref() {
-        // finding in which interval we are
-        match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
-        {
-            Some((ref before, ref after)) => {
-                // calculating the value using the curve function
-                let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
-
-                (
-                    try!(calculate_curve(&before.curve, before.x.unwrap_or(0.0) as f32,
-                        after.x.unwrap_or(0.0) as f32, position)),
-                    try!(calculate_curve(&before.curve, before.y.unwrap_or(0.0) as f32,
-                        after.y.unwrap_or(0.0) as f32, position))
-                )
-            },
-            None => {
-                // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| (t.x.unwrap_or(0.0) as f32, t.y.unwrap_or(0.0) as f32))
-                    .unwrap_or((0.0, 0.0))
-            }
+    let position = match timeline.translate.windows(2).find(|&w| elapsed >= w[0].time && elapsed < w[0].time)
+    {
+        Some(ref w) => {
+            // calculating the value using the curve function
+            let position = (elapsed - w[0].time) / (w[1].time - w[0].time);
+            (
+                try!(calculate_curve(&w[0].curve, w[0].x, w[1].x, position)),
+                try!(calculate_curve(&w[0].curve, w[0].y, w[1].y, position))
+            )
+        },
+        None => {
+            // we didn't find an interval, assuming we are past the end
+            timeline.translate.last().map(|t| (t.x, t.y)).unwrap_or((0.0, 0.0))
         }
-
-    } else {
-        // we have no timeline
-        (0.0, 0.0)
     };
 
 
     // calculating the current rotation
-    let rotation = if let Some(timeline) = timeline.rotate.as_ref() {
-        // finding in which interval we are
-        match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
-        {
-            Some((ref before, ref after)) => {
-                // calculating the value using the curve function
-                let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
-
-                try!(calculate_curve(&before.curve, before.angle.unwrap_or(0.0) as f32,
-                    after.angle.unwrap_or(0.0) as f32, position))
-            },
-            None => {
-                // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| t.angle.unwrap_or(0.0) as f32)
-                    .unwrap_or(0.0)
-            }
+    let rotation = match timeline.rotate.windows(2).find(|&w| elapsed >= w[0].time && elapsed < w[0].time)
+    {
+        Some(ref w) => {
+            // calculating the value using the curve function
+            let position = (elapsed - w[0].time) / (w[1].time - w[0].time);
+            try!(calculate_curve(&w[0].curve, w[0].angle, w[1].angle, position))
+        },
+        None => {
+            // we didn't find an interval, assuming we are past the end
+            timeline.rotate.last().map(|t| t.angle).unwrap_or(0.0)
         }
-
-    } else {
-        // we have no timeline
-        0.0
     };
-
 
     // calculating the current scale
-    let scale = if let Some(timeline) = timeline.scale.as_ref() {
-        // finding in which interval we are
-        match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
-        {
-            Some((ref before, ref after)) => {
-                // calculating the value using the curve function
-                let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
-
-                (
-                    try!(calculate_curve(&before.curve, before.x.unwrap_or(1.0) as f32,
-                        after.x.unwrap_or(1.0) as f32, position)),
-                    try!(calculate_curve(&before.curve, before.y.unwrap_or(1.0) as f32,
-                        after.y.unwrap_or(1.0) as f32, position))
-                )
-            },
-            None => {
-                // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| (t.x.unwrap_or(1.0) as f32, t.y.unwrap_or(1.0) as f32))
-                    .unwrap_or((1.0, 1.0))
-            }
+    // finding in which interval we are
+    let scale = match timeline.scale.windows(2).find(|&w| elapsed >= w[0].time && elapsed < w[0].time)
+    {
+        Some(ref w) => {
+            // calculating the value using the curve function
+            let position = (elapsed - w[0].time) / (w[1].time - w[0].time);
+            (
+                try!(calculate_curve(&w[0].curve, w[0].x.unwrap_or(1.0), w[1].x.unwrap_or(1.0), position)),
+                try!(calculate_curve(&w[0].curve, w[0].y.unwrap_or(1.0), w[1].y.unwrap_or(1.0), position))
+            )
+        },
+        None => {
+            // we didn't find an interval, assuming we are past the end
+            timeline.scale.last().map(|t| (t.x.unwrap_or(1.0), t.y.unwrap_or(1.0))).unwrap_or((1.0, 1.0))
         }
-
-    } else {
-        // we have no timeline
-        (1.0, 1.0)
     };
 
-    
     // returning
     Ok(BoneData {
         position: position,
@@ -582,101 +467,61 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 /// Calculates a curve using the value of a "curve" member.
 ///
 /// Position must be between 0 and 1
-fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
+fn calculate_curve(formula: &format::Curve, from: f32, to: f32,
     position: f32) -> Result<f32, CalculationError>
 {
     assert!(position >= 0.0 && position <= 1.0);
 
-    let bezier = match formula {
-        &None =>
-            return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
-            return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
-            return Ok(from),
-        &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
-        a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
-    };
-    
-    let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
-                                      bezier.get(2), bezier.get(3))
-    {
-        (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
-            (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
-        a =>
-            return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
-    };
+    match *formula {
+        format::Curve::Linear  => Ok(from + position * (to - from)),
+        format::Curve::Stepped => Ok(from),
+        format::Curve::Bezier(cx1, cy1, cx2, cy2) => {
+            let factor = (0 ..).map(|v| v as f32 * 0.02)
+                .take_while(|v| *v <= 1.0)
+                .map(|t| {
+                    let x = 3f32 * cx1 * t * (1.0f32 - t) * (1.0f32 - t)
+                        + 3f32 * cx2 * t * t * (1.0f32 - t) + t * t * t;
+                    let y = 3f32 * cy1 * t * (1.0f32 - t) * (1.0f32 - t)
+                        + 3f32 * cy2 * t * t * (1.0f32 - t) + t * t * t;
 
-    let factor = (0 ..).map(|v| v as f32 * 0.02)
-        .take_while(|v| *v <= 1.0)
-        .map(|t| {
-            let x = 3.0 * cx1 * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * cx2 * t * t * (1.0 - t) + t * t * t;
-            let y = 3.0 * cy1 * t * (1.0 - t) * (1.0 - t)
-                + 3.0 * cy2 * t * t * (1.0 - t) + t * t * t;
+                    (x, y)
+                })
+                .scan((0.0, 0.0), |previous, current| {
+                    let result = Some((previous.clone(), current));
+                    *previous = current;
+                    result
+                })
+                .find(|&(previous, current)| {
+                    position >= previous.0 && position < current.0
+                })
+                .map(|((_, val), _)| val)
+                .unwrap_or(1.0);
 
-            (x, y)
-        })
-        .scan((0.0, 0.0), |previous, current| {
-            let result = Some((previous.clone(), current));
-            *previous = current;
-            result
-        })
-        .find(|&(previous, current)| {
-            position >= previous.0 && position < current.0
-        })
-        .map(|((_, val), _)| val)
-        .unwrap_or(1.0);
-
-    Ok(from + factor * (to - from))
+            Ok(from + factor * (to - from))
+        }
+    }
 }
 
 /// Builds the color and attachment corresponding to a slot timeline.
-fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
-    -> Result<(Option<&str>, Option<&str>), CalculationError>
+fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32) -> (Option<&str>, Option<&str>)
 {
     // calculating the attachment
-    let attachment = if let Some(timeline) = timeline.attachment.as_ref() {
-        // finding in which interval we are
-        match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
-        {
-            Some((ref before, _)) => {
-                before.name.as_ref().map(|e| &e[..])
-            },
-            None => {
-                // we didn't find an interval, assuming we are past the end
-                timeline.last().and_then(|t| (t.name.as_ref().map(|e| &e[..])))
-            }
-        }
+    let attachment = timeline.attachment.as_ref().and_then(|timeline|
+        timeline.windows(2)
+                 // finding in which interval we are
+                 .find(|&w| w[0].time <= elapsed && elapsed < w[1].time)
+                 .map(|ref w| &*w[0].name)
+                 .or_else(|| timeline.last().map(|ref t| &*t.name))
+    );
 
-    } else {
-        // we have no timeline
-        None
-    };
+    let color = timeline.color.as_ref().and_then(|timeline|
+        timeline.windows(2)
+                 // finding in which interval we are
+                 .find(|&w| w[0].time <= elapsed && elapsed < w[1].time)
+                 .map(|ref w| &*w[0].color)
+                 .or_else(|| timeline.last().map(|ref t| &*t.color))
+    );
 
-
-    // calculating the color
-    let color = if let Some(timeline) = timeline.color.as_ref() {
-        // finding in which interval we are
-        match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
-        {
-            Some((ref before, _)) => {
-                before.color.as_ref().map(|e| &e[..])
-            },
-            None => {
-                // we didn't find an interval, assuming we are past the end
-                timeline.last().and_then(|t| (t.color.as_ref().map(|e| &e[..])))
-            }
-        }
-
-    } else {
-        // we have no timeline
-        None
-    };
-
-    
     // returning
-    Ok((color, attachment))
+    (color, attachment)
 }
