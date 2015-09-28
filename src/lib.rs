@@ -245,9 +245,8 @@ impl SpineDocument {
             let mut bone_matrix = bone_data.to_matrix();
             if let Some(ref p) = b.parent {
                 // search parent index (reversely)
-                let j = try!(self.sorted_bones_idx[..i].iter().enumerate().rev()
-                        .find(|&(_, &k)| self.source.bones[k].name == *p)
-                        .map(|(j, _)|j).ok_or(CalculationError::UnknownCurveFunction(format!("can't find parent {}", p))));
+                let j = i - 1 - self.sorted_bones_idx[..i].iter().rev()
+                                .position(|&k| self.source.bones[k].name == *p).unwrap();
                 bone_matrix = bone_matrix * bone_matrices[j]
             }
 
@@ -264,16 +263,15 @@ impl SpineDocument {
         for slot in self.source.slots.iter() {
 
             // bone matrix
-            let mut matrix = bone_matrices[try!(self.sorted_bones_idx.iter().enumerate()
-                .find(|&(_, &idx)|self.source.bones[idx].name == slot.bone)
-                .map(|(i, _)| i)
+            let mut matrix = bone_matrices[try!(self.sorted_bones_idx.iter()
+                .position(|&idx|self.source.bones[idx].name == slot.bone)
                 .ok_or(CalculationError::BoneNotFound(&slot.bone)))];
 
             // if we are animating, replacing the values by the ones overridden by the animation
             let (mut color, mut attachment) = (slot.color.as_ref().map(|ref e| &e[..]),
                                                slot.attachment.as_ref().map(|ref e| &e[..]));
             if let Some(animation) = animation {
-                for (_, timelines) in animation.slots.iter().filter(|&(name, _)| *name == slot.name) {
+                if let Some(timelines) = animation.slots.get(&slot.name) {
                     // calculating the variation from the animation
                     let (anim_color, anim_attach) = timelines_to_slotdata(timelines, elapsed);
                     if let Some(c) = anim_color { color = Some(c) };
@@ -282,28 +280,19 @@ impl SpineDocument {
             }
 
             // now finding the attachment of each slot
-            if let Some(attach_name) = attachment {
-
-                if let Some((_, skin_attach)) = skin.iter().chain(default_skin.iter())
-                                               .find(|&(skin_slot, _)| *skin_slot == slot.name)
+            if let Some(mut attach_name) = attachment {
+                if let Some(skin_attach) = skin.get(&slot.name).or_else(|| default_skin.get(&slot.name))
                 {
-                    let attachment = try!(skin_attach.iter()
-                        .find(|&(a, _)| *a == attach_name)
-                        .map(|(_, att)| att)
+                    let attachment = try!(skin_attach.get(attach_name)
                         .ok_or(CalculationError::AttachmentNotFound(attach_name)));
 
-                    let attachment_transform = get_attachment_transformation(attachment);
-                    matrix = matrix * attachment_transform;
-
-                    let attach_name = if let Some(ref name) = attachment.name {
-                        &name[..]
-                    } else {
-                        &attach_name[..]
-                    };
+                    if let Some(ref name) = attachment.name {
+                        attach_name = &name[..];
+                    }
 
                     sprites.push((
                         attach_name,
-                        matrix,
+                        matrix * get_attachment_transformation(attachment),
                         Rgba { a: 255, c: Rgb::new(255, 255, 255) }
                     ));
                 }
