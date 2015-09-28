@@ -71,8 +71,9 @@ for (sprite_name, matrix, color) in results.sprites.into_iter() {
 
 */
 #![deny(missing_docs)]
-#![feature(custom_derive, plugin, custom_attribute, type_macros)]
-#![plugin(serde_macros)]
+
+#![cfg_attr(feature = "serde_macros", feature(custom_derive, plugin, custom_attribute, type_macros))]
+#![cfg_attr(feature = "serde_macros", plugin(serde_macros))]
 
 extern crate color;
 extern crate cgmath;
