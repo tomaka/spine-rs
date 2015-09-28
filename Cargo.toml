@@ -5,20 +5,29 @@ authors = [ "pierre.krieger1708@gmail.com" ]
 description = "Simple implementation of the Spine runtime"
 license = "Apache-2.0"
 repository = "https://github.com/tomaka/spine-rs"
+build = "build.rs"
 
 [lib]
 name = "spine"
 path = "src/lib.rs"
 
+[features]
+default = ["serde_codegen"]
+nightly = ["serde_macros"]
+
+[build-dependencies]
+serde_codegen = { version = "*", optional = true }
+syntex = "*"
+
 [dependencies]
 cgmath = "0.2"
 libc = "0.1"
+serde = "*"
+serde_json = "*"
+serde_macros = { version = "*", optional = true }
 
 [dependencies.color]
 git = "https://github.com/bjz/color-rs.git"
-
-[dependencies.from_json]
-git = "https://github.com/tomaka/from_json"
 
 [dev-dependencies]
 clock_ticks = "0.0"
