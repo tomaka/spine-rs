@@ -25,8 +25,8 @@ You can retreive the list of animations and skins provided a document:
 # let document: spine::SpineDocument = unsafe { std::mem::uninitialized() };
 let skins = document.get_skins_list();
 
-let animations = document.get_animations_list();
-let first_animation_duration = document.get_animation_duration(animations[0]).unwrap();
+let animations = document.get_animations();
+let some_animation_duration = animations.iter().next().map(|(_, a)| a.duration).unwrap();
 ```
 
 You can also get a list of the names of all the sprites that can possibly be drawn by this
@@ -50,7 +50,8 @@ This function takes the skin name, the animation name (or `None` for the default
 
 ```no_run
 # let document: spine::SpineDocument = unsafe { std::mem::uninitialized() };
-let results = document.calculate("default", Some("walk"), 0.176).unwrap();
+let animations = document.get_animations();
+let results = document.calculate("default", animations.get("walk"), 0.176).unwrap();
 ```
 
 The results contain the list of sprites that need to be drawn, with their matrix. The matrix
@@ -85,22 +86,59 @@ mod format;
 use color::{Rgb, Rgba};
 use cgmath::Matrix4;
 use std::io::Read;
+use std::collections::HashMap;
 
 /// Spine document loaded in memory.
 pub struct SpineDocument {
     source: format::Document,
 }
 
+/// Animation with precomputed data
+pub struct AnimationData<'a> {
+    animation: &'a format::Animation,
+    /// total duration of the animation
+    pub duration: f32
+}
+
+impl<'a> AnimationData<'a> {
+    /// Creates a new AnimationData
+    /// Used when iterating over HashMap
+    fn new(animation: &'a format::Animation) -> AnimationData<'a> {
+
+        let duration = animation.bones.values().flat_map(|timelines|{
+            timelines.translate.iter().map(|e| e.time)
+            .chain(timelines.rotate.iter().map(|e| e.time))
+            .chain(timelines.scale.iter().map(|e| e.time))
+        })
+        .chain(animation.slots.values().flat_map(|timelines|{
+            timelines.attachment.iter().flat_map(|attachment| attachment.iter().map(|e| e.time))
+            .chain(timelines.color.iter().flat_map(|color| color.iter().map(|e| e.time)))
+        }))
+        .fold(0.0, f32::max) as f32;
+
+        AnimationData {
+            animation: animation,
+            duration: duration
+        }
+    }
+}
+
 impl SpineDocument {
     /// Loads a document from a reader.
     pub fn new<R: Read>(reader: R) -> Result<SpineDocument, String> {
 
-        let document: format::Document = try!(serde_json::from_reader(reader)
-                                              .map_err(|e| format!("{:?}", e)));
+        let document: format::Document =
+            try!(serde_json::from_reader(reader).map_err(|e| format!("{:?}", e)));
 
         Ok(SpineDocument {
             source: document
         })
+    }
+
+    /// Returns all precomputed animations in this document.
+    pub fn get_animations(&self) -> HashMap<&str, AnimationData> {
+        self.source.animations.iter()
+            .map(|(name, animation)| (name as &str, AnimationData::new(animation))).collect()
     }
 
     /// Returns the list of all animations in this document.
@@ -115,59 +153,12 @@ impl SpineDocument {
 
     /// Returns true if an animation is in the document.
     pub fn has_animation(&self, name: &str) -> bool {
-         self.source.animations.contains_key(name)
+        self.source.animations.contains_key(name)
     }
 
     /// Returns true if a skin is in the document.
     pub fn has_skin(&self, name: &str) -> bool {
-         self.source.skins.contains_key(name)
-    }
-
-    /// Returns the duration of an animation.
-    ///
-    /// Returns `None` if the animation doesn't exist.
-    ///
-    /// TODO: check events and draworder?
-    pub fn get_animation_duration(&self, animation: &str) -> Option<f32> {
-        // getting a reference to the `format::Animation`
-        let animation: &format::Animation =
-            match self.source.animations.get(animation) {
-                Some(a) => a,
-                None => return None
-            };
-
-        // this contains the final result
-        let mut result = 0.0f32;
-
-        // checking the bones
-        for timelines in animation.bones.values() {
-            for elem in timelines.translate.iter() {
-                if elem.time > result { result = elem.time }
-            }
-            for elem in timelines.rotate.iter() {
-                if elem.time > result { result = elem.time }
-            }
-            for elem in timelines.scale.iter() {
-                if elem.time > result { result = elem.time }
-            }
-        }
-
-        // checking the slots
-        for timelines in animation.slots.values() {
-            if let Some(ref attachment) = timelines.attachment.as_ref() {
-                for elem in attachment.iter() {
-                    if elem.time > result { result = elem.time }
-                }
-            }
-            if let Some(ref color) = timelines.color.as_ref() {
-                for elem in color.iter() {
-                    if elem.time > result { result = elem.time }
-                }
-            }
-        }
-
-        // returning
-        Some(result as f32)
+        self.source.skins.contains_key(name)
     }
 
     /// Returns a list of all possible sprites when drawing.
@@ -196,16 +187,15 @@ impl SpineDocument {
     // TODO: implement draw order timeline
     // TODO: implement events
     // TODO: implement other attachment types
-    pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32)
+    pub fn calculate<'a>(&'a self, skin: &str, animation: Option<&'a AnimationData<'a>>, elapsed: f32)
         -> Result<Calculation, CalculationError>
     {
         // adapting elapsed
-        if let Some(animation) = animation {
-            if let Some(duration) = self.get_animation_duration(animation) {
-                elapsed = elapsed % duration;
-            }
-        }
-        let elapsed = elapsed;
+        let elapsed = if let Some(ref animation) = animation {
+            elapsed % animation.duration
+        } else {
+            elapsed
+        };
 
         // getting a reference to the `format::Skin`
         let skin = try!(self.source.skins.get(skin).ok_or(CalculationError::SkinNotFound));
@@ -214,11 +204,7 @@ impl SpineDocument {
         let default_skin = try!(self.source.skins.get("default").ok_or(CalculationError::SkinNotFound));
 
         // getting a reference to the `format::Animation`
-        let animation: Option<&format::Animation> = match animation {
-            Some(animation) => Some(try!(self.source.animations.get(animation)
-                                         .ok_or(CalculationError::AnimationNotFound))),
-            None => None
-        };
+        let animation = animation.map(|ref animation_data| animation_data.animation);
 
         // calculating the default pose of all bones
         let mut bones: Vec<(&format::Bone, BoneData)> = self.source.bones.iter()
@@ -397,7 +383,10 @@ impl BoneData {
     fn to_matrix(&self) -> Matrix4<f32> {
         use cgmath::{Matrix2, Vector3};
 
-        let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0, 0.0, self.scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+        let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0,
+                                        0.0, self.scale.1, 0.0, 0.0,
+                                        0.0, 0.0, 1.0, 0.0,
+                                        0.0, 0.0, 0.0, 1.0);
         let rotation_matrix = Matrix4::from(Matrix2::from_angle(cgmath::deg(self.rotation).into()));
         let translation_matrix = Matrix4::from_translation(&Vector3::new(self.position.0, self.position.1, 0.0));
 
