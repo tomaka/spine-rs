@@ -83,7 +83,7 @@ extern crate serde_json;
 mod format;
 
 use color::{Rgb, Rgba};
-use cgmath::Matrix4;
+use cgmath::{Matrix3, Matrix4};
 use std::io::Read;
 
 /// Spine document loaded in memory.
@@ -240,7 +240,7 @@ impl SpineDocument {
 
         // now we have our list of bones with their relative positions
         // adding the position of the parent to each bone
-        let bones: Vec<(&str, Matrix4<f32>)> = bones.iter().map(|&(ref bone, ref relative_data)| {
+        let bones: Vec<(&str, Matrix3<f32>)> = bones.iter().map(|&(ref bone, ref relative_data)| {
             let mut current_matrix = relative_data.to_matrix();
             let mut current_parent = bone.parent.as_ref();
 
@@ -269,7 +269,7 @@ impl SpineDocument {
 
         // now taking each slot in the document and matching its bone
         // `slots` contains the slot name, bone data, color, and attachment
-        let mut slots: Vec<(&str, Matrix4<f32>, Option<&str>, Option<&str>)> ={
+        let mut slots: Vec<(&str, Matrix3<f32>, Option<&str>, Option<&str>)> ={
             let mut result = Vec::new();
 
             for slot in self.source.slots.iter() {
@@ -327,7 +327,7 @@ impl SpineDocument {
 
                     results.push((
                         attachment,
-                        bone_data,
+                        Matrix4::from(bone_data),
                         Rgba { a: 255, c: Rgb::new(255, 255, 255) }
                     ));
                 }
@@ -394,12 +394,16 @@ struct BoneData {
 }
 
 impl BoneData {
-    fn to_matrix(&self) -> Matrix4<f32> {
-        use cgmath::{Matrix2, Vector3};
+    fn to_matrix(&self) -> Matrix3<f32> {
+        use cgmath::Matrix2;
 
-        let scale_matrix = Matrix4::new(self.scale.0, 0.0, 0.0, 0.0, 0.0, self.scale.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-        let rotation_matrix = Matrix4::from(Matrix2::from_angle(cgmath::deg(self.rotation).into()));
-        let translation_matrix = Matrix4::from_translation(&Vector3::new(self.position.0, self.position.1, 0.0));
+        let scale_matrix = Matrix3::new(self.scale.0, 0.0, 0.0,
+                                        0.0, self.scale.1, 0.0,
+                                        0.0, 0.0, 1.0);
+        let rotation_matrix = Matrix3::from(Matrix2::from_angle(cgmath::deg(self.rotation).into()));
+        let translation_matrix = Matrix3::new(1.0,  0.0, 0.0,
+                                              0.0, 1.0,  0.0,
+                                              self.position.0, self.position.1, 1.0);
 
         translation_matrix * rotation_matrix * scale_matrix
     }
@@ -427,7 +431,7 @@ fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
 }
 
 /// Returns the `Matrix` of an attachment.
-fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32> {
+fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix3<f32> {
     BoneData {
         position: (attachment.x, attachment.y),
         rotation: attachment.rotation,
