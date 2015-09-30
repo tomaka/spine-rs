@@ -5,9 +5,12 @@ use json;
 use from_json;
 use std::collections::HashMap;
 use std::io::Read;
+use std::f32::consts::PI;
+
+const TO_RADIAN: f32 = PI / 180f32;
 
 fn bone_index(name: &str, bones: &[Bone]) -> Result<usize, SkeletonError> {
-    bones.iter().position(|b| b.data.name == *name).ok_or(SkeletonError::BoneNotFound(name.into()))
+    bones.iter().position(|b| b.name == *name).ok_or(SkeletonError::BoneNotFound(name.into()))
 }
 
 fn slot_index(name: &str, slots: &[Slot]) -> Result<usize, SkeletonError> {
@@ -36,7 +39,7 @@ impl From<SkeletonError> for String {
 pub struct Skeleton {
     bones: Vec<Bone>,
     slots: Vec<Slot>,
-    skins: HashMap<String, Vec<(usize, Vec<json::Attachment>)>>,
+    skins: HashMap<String, Vec<(usize, Vec<Attachment>)>>,
     animations: HashMap<String, Animation>
 }
 
@@ -93,7 +96,7 @@ impl Skeleton {
                         if attachment.name.is_none() {
                             attachment.name = Some(name);
                         }
-                        attachment
+                        Attachment::from_json(attachment)
                      }).collect();
                     skin.push((slot, attachments));
                 }
@@ -122,7 +125,7 @@ pub struct Animation {
 impl Animation {
 
     /// Creates a from_json Animation
-    pub fn from_json(animation: json::Animation, bones: &[Bone], slots: &[Slot])
+    fn from_json(animation: json::Animation, bones: &[Bone], slots: &[Slot])
         -> Result<Animation, SkeletonError>
     {
         let duration = Animation::duration(&animation);
@@ -167,20 +170,35 @@ impl Animation {
     }
 }
 
+/// Scale, Rotate, Translate struct
+pub struct SRT {
+    scale: (f32, f32),
+    rotation: f32,
+    translation: (f32, f32),
+}
+
 pub struct Bone {
-    data: json::Bone,
-    parent_index: Option<usize>
+    name: String,
+    parent_index: Option<usize>,
+    length: f32,
+    srt: SRT
 }
 
 impl Bone {
-    pub fn from_json(bone: json::Bone, bones: &[Bone]) -> Result<Bone, SkeletonError> {
+    fn from_json(bone: json::Bone, bones: &[Bone]) -> Result<Bone, SkeletonError> {
         let index = match bone.parent {
             Some(ref name) => Some(try!(bone_index(name, bones))),
             None => None
         };
         Ok(Bone {
-            data: bone,
-            parent_index: index
+            name: bone.name,
+            parent_index: index,
+            length: bone.length.unwrap_or(0f32),
+            srt: SRT {
+                scale: (bone.scaleX.unwrap_or(1f32), bone.scaleY.unwrap_or(1f32)),
+                rotation: bone.rotation.unwrap_or(0f32) * TO_RADIAN,
+                translation: (bone.x.unwrap_or(0f32), bone.y.unwrap_or(0f32)),
+            }
         })
     }
 }
@@ -191,11 +209,38 @@ pub struct Slot {
 }
 
 impl Slot {
-    pub fn from_json(slot: json::Slot, bones: &[Bone]) -> Result<Slot, SkeletonError> {
+    fn from_json(slot: json::Slot, bones: &[Bone]) -> Result<Slot, SkeletonError> {
         let bone_index = try!(bone_index(&slot.bone, &bones));
         Ok(Slot {
             data: slot,
             bone_index: bone_index
         })
+    }
+}
+
+pub struct Attachment {
+    name: Option<String>,
+    type_: json::AttachmentType,
+    srt: SRT,
+    size: (f32, f32),
+    fps: Option<f32>,
+    mode: Option<f32>,
+    //vertices: Option<Vec<??>>     // TODO: ?
+}
+
+impl Attachment {
+    fn from_json(attachment: json::Attachment) -> Attachment {
+        Attachment {
+            name: attachment.name,
+            type_: attachment.type_.unwrap_or(json::AttachmentType::Region),
+            srt: SRT {
+                scale: (attachment.scaleX.unwrap_or(1f32), attachment.scaleY.unwrap_or(1f32)),
+                rotation: attachment.rotation.unwrap_or(0f32) * TO_RADIAN,
+                translation: (attachment.x.unwrap_or(0f32), attachment.y.unwrap_or(0f32)),
+            },
+            size: (attachment.width.unwrap_or(0f32), attachment.height.unwrap_or(0f32)),
+            fps: attachment.fps,
+            mode: attachment.mode
+        }
     }
 }

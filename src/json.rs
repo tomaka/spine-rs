@@ -189,7 +189,7 @@ derive_from_json!(SlotColorTimeline, time, color, curve);
 
 #[derive(Debug, Clone)]
 pub struct EventKeyframe {
-    time: f32,
+    pub time: f32,
     name: String,
     int_: Option<i32>,
     float_: Option<f32>,
@@ -201,7 +201,7 @@ derive_from_json!(EventKeyframe, time, name, int_ as "int", float_ as "float",
 
 #[derive(Debug, Clone)]
 pub struct DrawOrderTimeline {
-    time: f32,
+    pub time: f32,
     offsets: Option<Vec<DrawOrderTimelineOffset>>,
 }
 
