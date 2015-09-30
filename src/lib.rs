@@ -591,14 +591,12 @@ fn calculate_curve(formula: &Option<json::TimelineCurve>, from: f32, to: f32,
     assert!(position >= 0.0 && position <= 1.0);
 
     let bezier = match formula {
-        &None =>
+        &None |
+        &Some(json::TimelineCurve::CurveLinear) =>
             return Ok(from + position * (to - from)),
-        &Some(json::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
-            return Ok(from + position * (to - from)),
-        &Some(json::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
+        &Some(json::TimelineCurve::CurveStepped) =>
             return Ok(from),
-        &Some(json::TimelineCurve::CurveBezier(ref a)) => &a[..],
-        a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
+        &Some(json::TimelineCurve::CurveBezier(ref a)) => &a[..]
     };
 
     let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),

@@ -15,7 +15,6 @@ fn slot_index(name: &str, slots: &[Slot]) -> Result<usize, SkeletonError> {
 }
 
 /// Error that can happen while calculating an animation.
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SkeletonError {
     /// The requested bone was not found.
     BoneNotFound(String),
@@ -109,9 +108,7 @@ impl Skeleton {
             animations: animations
         })
     }
-
 }
-
 
 /// Animation with precomputed data
 pub struct Animation {
@@ -168,7 +165,6 @@ impl Animation {
         })))
         .fold(0.0f32, f32::max)
     }
-
 }
 
 pub struct Bone {

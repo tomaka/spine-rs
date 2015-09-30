@@ -139,8 +139,9 @@ derive_from_json!(BoneScaleTimeline, time, curve, x, y);
 
 #[derive(Debug, Clone)]
 pub enum TimelineCurve {
+    CurveLinear,
+    CurveStepped,
     CurveBezier(Vec<f32>),
-    CurvePredefined(String),
 }
 
 impl from_json::FromJson for TimelineCurve {
@@ -150,7 +151,13 @@ impl from_json::FromJson for TimelineCurve {
         if input.is_array() {
             Ok(TimelineCurve::CurveBezier(try!(FromJson::from_json(input))))
         } else {
-            Ok(TimelineCurve::CurvePredefined(try!(FromJson::from_json(input))))
+            let curve_type: String = try!(FromJson::from_json(input));
+            match &curve_type[..] {
+                "linear" => Ok(TimelineCurve::CurveLinear),
+                "stepped" => Ok(TimelineCurve::CurveStepped),
+                _ => Err(from_json::FromJsonError::ExpectError(
+                    "Timeline curve must be either linear, stepped or an array", input.clone()))
+            }
         }
     }
 }
