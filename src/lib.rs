@@ -85,6 +85,8 @@ use std::io::Read;
 mod json;
 mod skeleton;
 
+pub use skeleton::Skeleton;
+
 /// Spine document loaded in memory.
 pub struct SpineDocument {
     source: json::Document,

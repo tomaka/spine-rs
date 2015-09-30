@@ -33,6 +33,7 @@ impl From<SkeletonError> for String {
     }
 }
 
+/// Skeleton data converted from json and loaded into memory
 pub struct Skeleton {
     bones: Vec<Bone>,
     slots: Vec<Slot>,
@@ -42,6 +43,7 @@ pub struct Skeleton {
 
 impl Skeleton {
 
+    /// Consumes reader (with json data) and returns a skeleton wrapping
     pub fn from_reader<R: Read>(mut reader: R) -> Result<Skeleton, String> {
 
         // read and convert as json

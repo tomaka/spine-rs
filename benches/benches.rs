@@ -1,4 +1,4 @@
-#![feature(test)] 
+#![feature(test)]
 
 extern crate spine;
 extern crate test;
@@ -7,11 +7,19 @@ extern crate clock_ticks;
 use std::io::BufReader;
 
 #[bench]
-fn loading(bencher: &mut test::Bencher) {
+fn loading_json(bencher: &mut test::Bencher) {
     let src: &[u8] = include_bytes!("../tests/example.json");
 
     bencher.iter(|| {
         spine::SpineDocument::new(BufReader::new(src))
+    });
+}
+
+#[bench]
+fn loading_skeleton(bencher: &mut test::Bencher) {
+    let src: &[u8] = include_bytes!("../tests/example.json");
+    bencher.iter(|| {
+        spine::Skeleton::from_reader(BufReader::new(src))
     });
 }
 
