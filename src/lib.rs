@@ -83,6 +83,7 @@ use cgmath::Matrix4;
 use std::io::Read;
 
 mod json;
+mod skeleton;
 
 /// Spine document loaded in memory.
 pub struct SpineDocument {
