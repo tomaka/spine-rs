@@ -82,18 +82,18 @@ use cgmath::Matrix4;
 
 use std::io::Read;
 
-mod format;
+mod json;
 
 /// Spine document loaded in memory.
 pub struct SpineDocument {
-    source: format::Document,
+    source: json::Document,
 }
 
 impl SpineDocument {
     /// Loads a document from a reader.
     pub fn new<R: Read>(mut reader: R) -> Result<SpineDocument, String> {
         let document = try!(from_json::Json::from_reader(&mut reader).map_err(|e| format!("{:?}", e)));
-        let document: format::Document = try!(from_json::FromJson::from_json(&document)
+        let document: json::Document = try!(from_json::FromJson::from_json(&document)
             .map_err(|e| format!("{:?}", e)));
 
         Ok(SpineDocument {
@@ -140,11 +140,11 @@ impl SpineDocument {
     /// Returns the duration of an animation.
     ///
     /// Returns `None` if the animation doesn't exist.
-    /// 
+    ///
     /// TODO: check events and draworder?
     pub fn get_animation_duration(&self, animation: &str) -> Option<f32> {
-        // getting a reference to the `format::Animation`
-        let animation: &format::Animation = 
+        // getting a reference to the `json::Animation`
+        let animation: &json::Animation =
             if let Some(anim) = self.source.animations.as_ref() {
                 match anim.get(animation) {
                     Some(a) => a,
@@ -155,7 +155,7 @@ impl SpineDocument {
             };
 
         // this contains the final result
-        let mut result = 0.0f64;
+        let mut result = 0.0f32;
 
         // checking the bones
         if let Some(ref bones) = animation.bones {
@@ -195,7 +195,7 @@ impl SpineDocument {
         }
 
         // returning
-        Some(result as f32)
+        Some(result)
     }
 
     /// Returns a list of all possible sprites when drawing.
@@ -229,7 +229,7 @@ impl SpineDocument {
     // TODO: implement draw order timeline
     // TODO: implement events
     // TODO: implement other attachment types
-    pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32) 
+    pub fn calculate(&self, skin: &str, animation: Option<&str>, mut elapsed: f32)
         -> Result<Calculation, CalculationError>
     {
         // adapting elapsed
@@ -240,7 +240,7 @@ impl SpineDocument {
         }
         let elapsed = elapsed;
 
-        // getting a reference to the `format::Skin`
+        // getting a reference to the `json::Skin`
         let skin = try!(self.source.skins.as_ref().and_then(|l| l.get(skin))
             .ok_or(CalculationError::SkinNotFound));
 
@@ -248,15 +248,15 @@ impl SpineDocument {
         let default_skin = try!(self.source.skins.as_ref().and_then(|l| l.get("default"))
             .ok_or(CalculationError::SkinNotFound));
 
-        // getting a reference to the `format::Animation`
-        let animation: Option<&format::Animation> = match animation {
+        // getting a reference to the `json::Animation`
+        let animation: Option<&json::Animation> = match animation {
             Some(animation) => Some(try!(self.source.animations.as_ref()
                 .and_then(|l| l.get(animation)).ok_or(CalculationError::AnimationNotFound))),
             None => None
         };
 
         // calculating the default pose of all bones
-        let mut bones: Vec<(&format::Bone, BoneData)> = self.source.bones.as_ref().map(|bones| {
+        let mut bones: Vec<(&json::Bone, BoneData)> = self.source.bones.as_ref().map(|bones| {
             bones.iter().map(|bone| (bone, get_bone_default_local_setup(bone))).collect()
         }).unwrap_or_else(|| Vec::new());
 
@@ -463,48 +463,48 @@ impl std::ops::Add<BoneData> for BoneData {
 }
 
 /// Returns the setup pose of a bone relative to its parent.
-fn get_bone_default_local_setup(bone: &format::Bone) -> BoneData {
+fn get_bone_default_local_setup(bone: &json::Bone) -> BoneData {
     BoneData {
-        position: (bone.x.unwrap_or(0.0) as f32, bone.y.unwrap_or(0.0) as f32),
-        rotation: bone.rotation.unwrap_or(0.0) as f32,
-        scale: (bone.scaleX.unwrap_or(1.0) as f32, bone.scaleY.unwrap_or(1.0) as f32),
+        position: (bone.x.unwrap_or(0.0), bone.y.unwrap_or(0.0)),
+        rotation: bone.rotation.unwrap_or(0.0),
+        scale: (bone.scaleX.unwrap_or(1.0), bone.scaleY.unwrap_or(1.0)),
     }
 }
 
 /// Returns the `Matrix` of an attachment.
-fn get_attachment_transformation(attachment: &format::Attachment) -> Matrix4<f32> {
+fn get_attachment_transformation(attachment: &json::Attachment) -> Matrix4<f32> {
     BoneData {
-        position: (attachment.x.unwrap_or(0.0) as f32, attachment.y.unwrap_or(0.0) as f32),
-        rotation: attachment.rotation.unwrap_or(0.0) as f32,
+        position: (attachment.x.unwrap_or(0.0), attachment.y.unwrap_or(0.0)),
+        rotation: attachment.rotation.unwrap_or(0.0),
         scale: (
-            attachment.scaleX.unwrap_or(1.0) as f32 * attachment.width.unwrap_or(1.0) as f32 / 2.0,
-            attachment.scaleY.unwrap_or(1.0) as f32 * attachment.height.unwrap_or(1.0) as f32 / 2.0
+            attachment.scaleX.unwrap_or(1.0) * attachment.width.unwrap_or(1.0) / 2.0,
+            attachment.scaleY.unwrap_or(1.0) * attachment.height.unwrap_or(1.0) / 2.0
         ),
     }.to_matrix()
 }
 
 /// Builds the `Matrix4` corresponding to a timeline.
-fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Result<BoneData, CalculationError> {
+fn timelines_to_bonedata(timeline: &json::BoneTimeline, elapsed: f32) -> Result<BoneData, CalculationError> {
     // calculating the current position
     let position = if let Some(timeline) = timeline.translate.as_ref() {
         // finding in which interval we are
         match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
+            .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
         {
             Some((ref before, ref after)) => {
                 // calculating the value using the curve function
-                let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
+                let position = (elapsed - (before.time)) / ((after.time - before.time));
 
                 (
-                    try!(calculate_curve(&before.curve, before.x.unwrap_or(0.0) as f32,
-                        after.x.unwrap_or(0.0) as f32, position)),
-                    try!(calculate_curve(&before.curve, before.y.unwrap_or(0.0) as f32,
-                        after.y.unwrap_or(0.0) as f32, position))
+                    try!(calculate_curve(&before.curve, before.x.unwrap_or(0.0),
+                        after.x.unwrap_or(0.0), position)),
+                    try!(calculate_curve(&before.curve, before.y.unwrap_or(0.0),
+                        after.y.unwrap_or(0.0), position))
                 )
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| (t.x.unwrap_or(0.0) as f32, t.y.unwrap_or(0.0) as f32))
+                timeline.last().map(|t| (t.x.unwrap_or(0.0), t.y.unwrap_or(0.0)))
                     .unwrap_or((0.0, 0.0))
             }
         }
@@ -519,18 +519,18 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
     let rotation = if let Some(timeline) = timeline.rotate.as_ref() {
         // finding in which interval we are
         match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
+            .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
         {
             Some((ref before, ref after)) => {
                 // calculating the value using the curve function
-                let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
+                let position = (elapsed - (before.time)) / ((after.time - before.time));
 
-                try!(calculate_curve(&before.curve, before.angle.unwrap_or(0.0) as f32,
-                    after.angle.unwrap_or(0.0) as f32, position))
+                try!(calculate_curve(&before.curve, before.angle.unwrap_or(0.0),
+                    after.angle.unwrap_or(0.0), position))
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| t.angle.unwrap_or(0.0) as f32)
+                timeline.last().map(|t| t.angle.unwrap_or(0.0))
                     .unwrap_or(0.0)
             }
         }
@@ -545,22 +545,22 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
     let scale = if let Some(timeline) = timeline.scale.as_ref() {
         // finding in which interval we are
         match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
+            .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
         {
             Some((ref before, ref after)) => {
                 // calculating the value using the curve function
-                let position = (elapsed - (before.time as f32)) / ((after.time - before.time) as f32);
+                let position = (elapsed - (before.time)) / ((after.time - before.time));
 
                 (
-                    try!(calculate_curve(&before.curve, before.x.unwrap_or(1.0) as f32,
-                        after.x.unwrap_or(1.0) as f32, position)),
-                    try!(calculate_curve(&before.curve, before.y.unwrap_or(1.0) as f32,
-                        after.y.unwrap_or(1.0) as f32, position))
+                    try!(calculate_curve(&before.curve, before.x.unwrap_or(1.0),
+                        after.x.unwrap_or(1.0), position)),
+                    try!(calculate_curve(&before.curve, before.y.unwrap_or(1.0),
+                        after.y.unwrap_or(1.0), position))
                 )
             },
             None => {
                 // we didn't find an interval, assuming we are past the end
-                timeline.last().map(|t| (t.x.unwrap_or(1.0) as f32, t.y.unwrap_or(1.0) as f32))
+                timeline.last().map(|t| (t.x.unwrap_or(1.0), t.y.unwrap_or(1.0)))
                     .unwrap_or((1.0, 1.0))
             }
         }
@@ -570,7 +570,7 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
         (1.0, 1.0)
     };
 
-    
+
     // returning
     Ok(BoneData {
         position: position,
@@ -582,7 +582,7 @@ fn timelines_to_bonedata(timeline: &format::BoneTimeline, elapsed: f32) -> Resul
 /// Calculates a curve using the value of a "curve" member.
 ///
 /// Position must be between 0 and 1
-fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
+fn calculate_curve(formula: &Option<json::TimelineCurve>, from: f32, to: f32,
     position: f32) -> Result<f32, CalculationError>
 {
     assert!(position >= 0.0 && position <= 1.0);
@@ -590,19 +590,19 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
     let bezier = match formula {
         &None =>
             return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
+        &Some(json::TimelineCurve::CurvePredefined(ref a)) if a == "linear" =>
             return Ok(from + position * (to - from)),
-        &Some(format::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
+        &Some(json::TimelineCurve::CurvePredefined(ref a)) if a == "stepped" =>
             return Ok(from),
-        &Some(format::TimelineCurve::CurveBezier(ref a)) => &a[..],
+        &Some(json::TimelineCurve::CurveBezier(ref a)) => &a[..],
         a => return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a))),
     };
-    
+
     let (cx1, cy1, cx2, cy2) = match (bezier.get(0), bezier.get(1),
                                       bezier.get(2), bezier.get(3))
     {
         (Some(&cx1), Some(&cy1), Some(&cx2), Some(&cy2)) =>
-            (cx1 as f32, cy1 as f32, cx2 as f32, cy2 as f32),
+            (cx1, cy1, cx2, cy2),
         a =>
             return Err(CalculationError::UnknownCurveFunction(format!("{:?}", a)))
     };
@@ -632,14 +632,14 @@ fn calculate_curve(formula: &Option<format::TimelineCurve>, from: f32, to: f32,
 }
 
 /// Builds the color and attachment corresponding to a slot timeline.
-fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
+fn timelines_to_slotdata(timeline: &json::SlotTimeline, elapsed: f32)
     -> Result<(Option<&str>, Option<&str>), CalculationError>
 {
     // calculating the attachment
     let attachment = if let Some(timeline) = timeline.attachment.as_ref() {
         // finding in which interval we are
         match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
+            .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
         {
             Some((ref before, _)) => {
                 before.name.as_ref().map(|e| &e[..])
@@ -660,7 +660,7 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
     let color = if let Some(timeline) = timeline.color.as_ref() {
         // finding in which interval we are
         match timeline.iter().zip(timeline.iter().skip(1))
-            .find(|&(before, after)| elapsed >= before.time as f32 && elapsed < after.time as f32)
+            .find(|&(before, after)| elapsed >= before.time && elapsed < after.time)
         {
             Some((ref before, _)) => {
                 before.color.as_ref().map(|e| &e[..])
@@ -676,7 +676,7 @@ fn timelines_to_slotdata(timeline: &format::SlotTimeline, elapsed: f32)
         None
     };
 
-    
+
     // returning
     Ok((color, attachment))
 }
