@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::f32::consts::PI;
 
+// Reexport all timelines
+use timelines::*;
+
 const TO_RADIAN: f32 = PI / 180f32;
 
 fn bone_index(name: &str, bones: &[Bone]) -> Result<usize, SkeletonError> {
@@ -37,10 +40,14 @@ impl From<SkeletonError> for String {
 
 /// Skeleton data converted from json and loaded into memory
 pub struct Skeleton {
-    bones: Vec<Bone>,
-    slots: Vec<Slot>,
-    skins: HashMap<String, Vec<(usize, Vec<Attachment>)>>,
-    animations: HashMap<String, Animation>
+    /// bones for the skeleton, hierarchically ordered
+    pub bones: Vec<Bone>,
+    /// slots
+    pub slots: Vec<Slot>,
+    /// skins : key: skin name, value: slots attachments
+    pub skins: HashMap<String, Skin>,
+    /// all the animations
+    pub animations: HashMap<String, Animation>
 }
 
 impl Skeleton {
@@ -87,20 +94,20 @@ impl Skeleton {
         }
 
         let mut skins = HashMap::new();
-        for jksins in doc.skins.into_iter() {
-            for (name, jslots) in jksins.into_iter() {
+        for jskin in doc.skins.into_iter() {
+            for (name, jslots) in jskin.into_iter() {
                 let mut skin = Vec::new();
                 for (name, attachments) in jslots.into_iter() {
-                    let slot = try!(slot_index(&name, &slots));
+                    let slot_index = try!(slot_index(&name, &slots));
                     let mut attachments = attachments.into_iter().map(|(name, mut attachment)| {
-                        if attachment.name.is_none() {
-                            attachment.name = Some(name);
-                        }
+                        if attachment.name.is_none() { attachment.name = Some(name); }
                         Attachment::from_json(attachment)
                      }).collect();
-                    skin.push((slot, attachments));
+                    skin.push((slot_index, attachments));
                 }
-                skins.insert(name, skin);
+                skins.insert(name, Skin {
+                    slots: skin
+                });
             }
         }
 
@@ -111,12 +118,17 @@ impl Skeleton {
             animations: animations
         })
     }
+
+}
+
+pub struct Skin {
+    slots: Vec<(usize, Vec<Attachment>)>
 }
 
 /// Animation with precomputed data
 pub struct Animation {
-    bones: Vec<(usize, json::BoneTimeline)>,
-    slots: Vec<(usize, json::SlotTimeline)>,
+    bones: Vec<(usize, BoneTimeline)>,
+    slots: Vec<(usize, SlotTimeline)>,
     events: Vec<json::EventKeyframe>,
     draworder: Vec<json::DrawOrderTimeline>,
     duration: f32
@@ -134,7 +146,7 @@ impl Animation {
         for jbones in animation.bones.into_iter() {
             for (name, timelines) in jbones.into_iter() {
                 let index = try!(bone_index(&name, bones));
-                abones.push((index, timelines));
+                abones.push((index, BoneTimeline::from_json(timelines)));
             }
         }
 
@@ -142,7 +154,7 @@ impl Animation {
         for jslots in animation.slots.into_iter() {
             for (name, timelines) in jslots.into_iter() {
                 let index = try!(slot_index(&name, slots));
-                aslots.push((index, timelines));
+                aslots.push((index, SlotTimeline::from_json(timelines)));
             }
         }
 

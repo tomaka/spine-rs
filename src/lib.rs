@@ -76,6 +76,7 @@ extern crate color;
 extern crate cgmath;
 #[macro_use]
 extern crate from_json;
+extern crate rustc_serialize as serialize;
 
 use color::{Rgb, Rgba};
 use cgmath::Matrix4;
