@@ -114,9 +114,8 @@ impl Skeleton {
                 let mut skin = Vec::new();
                 for (name, attachments) in jslots.into_iter() {
                     let slot_index = try!(slot_index(&name, &slots));
-                    let mut attachments = attachments.into_iter().map(|(name, mut attachment)| {
-                        if attachment.name.is_none() { attachment.name = Some(name); }
-                        Attachment::from_json(attachment)
+                    let attachments = attachments.into_iter().map(|(name, attachment)| {
+                        (name, Attachment::from_json(attachment))
                      }).collect();
                     skin.push((slot_index, attachments));
                 }
@@ -135,8 +134,11 @@ impl Skeleton {
     }
 }
 
+/// Skin
+/// defines a set of slot with custom attachments
+/// slots: Vec<(slot_index, HashMap<custom_attachment_name, Attachment>)>
 pub struct Skin {
-    slots: Vec<(usize, Vec<Attachment>)>
+    slots: Vec<(usize, HashMap<String, Attachment>)>
 }
 
 /// Animation with precomputed data
