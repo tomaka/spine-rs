@@ -50,7 +50,7 @@ pub struct Attachment {
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub fps: Option<f32>,
-    pub mode: Option<f32>,
+    pub mode: Option<String>,       // TODO: add enum forward, backward etc ...
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 

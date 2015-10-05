@@ -6,6 +6,7 @@ use from_json;
 use std::collections::HashMap;
 use std::io::Read;
 use std::f32::consts::PI;
+use serialize::hex::{FromHex, FromHexError};
 
 // Reexport all timelines
 use timelines::*;
@@ -17,7 +18,7 @@ fn bone_index(name: &str, bones: &[Bone]) -> Result<usize, SkeletonError> {
 }
 
 fn slot_index(name: &str, slots: &[Slot]) -> Result<usize, SkeletonError> {
-    slots.iter().position(|b| b.data.name == *name).ok_or(SkeletonError::SlotNotFound(name.into()))
+    slots.iter().position(|b| b.name == *name).ok_or(SkeletonError::SlotNotFound(name.into()))
 }
 
 /// Error that can happen while calculating an animation.
@@ -27,6 +28,12 @@ pub enum SkeletonError {
 
     /// The requested slot was not found.
     SlotNotFound(String),
+
+    /// The requested slot was not found.
+    SkinNotFound(String),
+
+    /// The requested slot was not found.
+    InvalidColor(String),
 }
 
 impl From<SkeletonError> for String {
@@ -34,7 +41,15 @@ impl From<SkeletonError> for String {
         match error {
             SkeletonError::BoneNotFound(b) => format!("Cannot find bone '{}'", &b),
             SkeletonError::SlotNotFound(s) => format!("Cannot find slot '{}'", &s),
+            SkeletonError::SkinNotFound(s) => format!("Cannot find skin '{}'", &s),
+            SkeletonError::InvalidColor(s) => format!("Cannot convert '{}' into a color", &s),
         }
+    }
+}
+
+impl From<FromHexError> for SkeletonError {
+    fn from(error: FromHexError) -> SkeletonError {
+        SkeletonError::InvalidColor(format!("{:?}", error))
     }
 }
 
@@ -80,7 +95,7 @@ impl Skeleton {
         let mut slots = Vec::new();
         if let Some(jslots) = doc.slots {
             for s in jslots.into_iter() {
-                let slot = try!(Slot::from_json(s, &bones));
+                let slot = try!(Slot::from_json(s, &bones, &slots));
                 slots.push(slot);
             }
         }
@@ -118,7 +133,6 @@ impl Skeleton {
             animations: animations
         })
     }
-
 }
 
 pub struct Skin {
@@ -183,6 +197,7 @@ impl Animation {
 }
 
 /// Scale, Rotate, Translate struct
+#[derive(Debug, Clone)]
 pub struct SRT {
     scale: (f32, f32),
     rotation: f32,
@@ -216,16 +231,25 @@ impl Bone {
 }
 
 pub struct Slot {
-    data: json::Slot,
-    bone_index: usize
+    name: String,
+    bone_index: usize,
+    color: Vec<u8>,
+    attachment: Option<usize>
 }
 
 impl Slot {
-    fn from_json(slot: json::Slot, bones: &[Bone]) -> Result<Slot, SkeletonError> {
+    fn from_json(slot: json::Slot, bones: &[Bone], slots: &[Slot]) -> Result<Slot, SkeletonError> {
         let bone_index = try!(bone_index(&slot.bone, &bones));
+        let color = try!(slot.color.unwrap_or("FFFFFFFF".into()).from_hex());
+        let attachment = match slot.attachment {
+            Some(jslot) => Some(try!(slot_index(&jslot, &slots))),
+            None => None
+        };
         Ok(Slot {
-            data: slot,
-            bone_index: bone_index
+            name: slot.name,
+            bone_index: bone_index,
+            color: color,
+            attachment: attachment
         })
     }
 }
@@ -236,7 +260,7 @@ pub struct Attachment {
     srt: SRT,
     size: (f32, f32),
     fps: Option<f32>,
-    mode: Option<f32>,
+    mode: Option<String>,
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 
