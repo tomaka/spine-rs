@@ -1,15 +1,21 @@
 /// Skeleton structs
 /// Owns json::Animation
 
+mod error;
+mod timelines;
+mod animation;
+
 use json;
 use from_json;
 use std::collections::HashMap;
 use std::io::Read;
 use std::f32::consts::PI;
-use serialize::hex::{FromHex, FromHexError};
+use serialize::hex::FromHex;
 
-// Reexport all timelines
-use timelines::*;
+// Reexport skeleton modules
+use self::error::*;
+use self::timelines::*;
+use self::animation::*;
 
 const TO_RADIAN: f32 = PI / 180f32;
 
@@ -19,38 +25,6 @@ fn bone_index(name: &str, bones: &[Bone]) -> Result<usize, SkeletonError> {
 
 fn slot_index(name: &str, slots: &[Slot]) -> Result<usize, SkeletonError> {
     slots.iter().position(|b| b.name == *name).ok_or(SkeletonError::SlotNotFound(name.into()))
-}
-
-/// Error that can happen while calculating an animation.
-pub enum SkeletonError {
-    /// The requested bone was not found.
-    BoneNotFound(String),
-
-    /// The requested slot was not found.
-    SlotNotFound(String),
-
-    /// The requested slot was not found.
-    SkinNotFound(String),
-
-    /// The requested slot was not found.
-    InvalidColor(String),
-}
-
-impl From<SkeletonError> for String {
-    fn from(error: SkeletonError) -> String {
-        match error {
-            SkeletonError::BoneNotFound(b) => format!("Cannot find bone '{}'", &b),
-            SkeletonError::SlotNotFound(s) => format!("Cannot find slot '{}'", &s),
-            SkeletonError::SkinNotFound(s) => format!("Cannot find skin '{}'", &s),
-            SkeletonError::InvalidColor(s) => format!("Cannot convert '{}' into a color", &s),
-        }
-    }
-}
-
-impl From<FromHexError> for SkeletonError {
-    fn from(error: FromHexError) -> SkeletonError {
-        SkeletonError::InvalidColor(format!("{:?}", error))
-    }
 }
 
 /// Skeleton data converted from json and loaded into memory
@@ -132,6 +106,14 @@ impl Skeleton {
             animations: animations
         })
     }
+
+    /// Iterator<Item=Vec<Slot>> where item are modified with timelines
+    pub fn iter<'a>(&'a self, skin: &str, animation: Option<&str>)
+        -> Result<AnimationIter<'a>, SkeletonError>
+    {
+        AnimationIter::new(self, skin, animation)
+    }
+
 }
 
 /// Skin
