@@ -32,3 +32,16 @@ fn animation(bencher: &mut test::Bencher) {
         doc.calculate("default", Some("walk"), (clock_ticks::precise_time_ns() / 1000000) as f32 / 1000.0)
     })
 }
+
+#[bench]
+fn animation_skeleton(bencher: &mut test::Bencher) {
+
+    let src: &[u8] = include_bytes!("../tests/example.json");
+    let doc = spine::Skeleton::from_reader(BufReader::new(src)).unwrap();
+
+    bencher.iter(|| {
+        if let Ok(mut anim) = doc.iter("default", Some("walk")) {
+            anim.next();
+        }
+    })
+}

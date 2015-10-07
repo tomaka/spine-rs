@@ -206,12 +206,12 @@ impl BoneTimeline {
     /// evaluates the interpolations for elapsed time on all timelines and
     /// returns the corresponding srt
     pub fn srt(&self, elapsed: f32) -> skeleton::SRT {
-    	let translation = self.translate.interpolate(elapsed).unwrap_or((0f32, 0f32));
+    	let position = self.translate.interpolate(elapsed).unwrap_or((0f32, 0f32));
     	let rotation = self.rotate.interpolate(elapsed).unwrap_or(0f32);
     	let scale = self.scale.interpolate(elapsed).unwrap_or((1f32, 1f32));
     	skeleton::SRT {
     	    scale: scale,
-    	    translation: translation,
+    	    position: position,
     	    rotation: rotation
     	}
     }

@@ -119,8 +119,20 @@ impl Skeleton {
 /// Skin
 /// defines a set of slot with custom attachments
 /// slots: Vec<(slot_index, HashMap<custom_attachment_name, Attachment>)>
+/// TODO: simpler architecture
 pub struct Skin {
-    slots: Vec<(usize, HashMap<String, Attachment>)>
+    pub slots: Vec<(usize, HashMap<String, Attachment>)>
+}
+
+impl Skin {
+    pub fn find(&self, slot_index: usize, attach_name: &str) -> Option<&Attachment> {
+        self.slots.iter().filter_map(|&(i, ref attachs)|
+            if i == slot_index {
+                attachs.get(attach_name)
+            } else {
+                None
+            }).next()
+    }
 }
 
 /// Animation with precomputed data
@@ -187,7 +199,7 @@ impl Animation {
 pub struct SRT {
     scale: (f32, f32),
     rotation: f32,
-    translation: (f32, f32),
+    position: (f32, f32),
 }
 
 pub struct Bone {
@@ -210,7 +222,7 @@ impl Bone {
             srt: SRT {
                 scale: (bone.scaleX.unwrap_or(1f32), bone.scaleY.unwrap_or(1f32)),
                 rotation: bone.rotation.unwrap_or(0f32) * TO_RADIAN,
-                translation: (bone.x.unwrap_or(0f32), bone.y.unwrap_or(0f32)),
+                position: (bone.x.unwrap_or(0f32), bone.y.unwrap_or(0f32)),
             }
         })
     }
@@ -220,22 +232,23 @@ pub struct Slot {
     name: String,
     bone_index: usize,
     color: Vec<u8>,
-    attachment: Option<usize>
+    attachment: Option<String>
 }
 
 impl Slot {
     fn from_json(slot: json::Slot, bones: &[Bone], slots: &[Slot]) -> Result<Slot, SkeletonError> {
         let bone_index = try!(bone_index(&slot.bone, &bones));
         let color = try!(slot.color.unwrap_or("FFFFFFFF".into()).from_hex());
-        let attachment = match slot.attachment {
-            Some(jslot) => Some(try!(slot_index(&jslot, &slots))),
-            None => None
-        };
+        // let attachment = match slot.attachment {
+        //     Some(jslot) => Some(try!(slot_index(&jslot, &slots))),
+        //     None => None
+        // };
         Ok(Slot {
             name: slot.name,
             bone_index: bone_index,
             color: color,
-            attachment: attachment
+            // attachment: attachment
+            attachment: slot.attachment
         })
     }
 }
@@ -258,7 +271,7 @@ impl Attachment {
             srt: SRT {
                 scale: (attachment.scaleX.unwrap_or(1f32), attachment.scaleY.unwrap_or(1f32)),
                 rotation: attachment.rotation.unwrap_or(0f32) * TO_RADIAN,
-                translation: (attachment.x.unwrap_or(0f32), attachment.y.unwrap_or(0f32)),
+                position: (attachment.x.unwrap_or(0f32), attachment.y.unwrap_or(0f32)),
             },
             size: (attachment.width.unwrap_or(0f32), attachment.height.unwrap_or(0f32)),
             fps: attachment.fps,
