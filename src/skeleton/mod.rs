@@ -13,7 +13,7 @@ use std::f32::consts::PI;
 use serialize::hex::FromHex;
 
 // Reexport skeleton modules
-use self::error::*;
+pub use self::error::*;
 use self::timelines::*;
 use self::animation::*;
 
@@ -144,7 +144,8 @@ impl Animation {
         for jbones in animation.bones.into_iter() {
             for (name, timelines) in jbones.into_iter() {
                 let index = try!(bone_index(&name, bones));
-                abones.push((index, BoneTimeline::from_json(timelines)));
+                let timeline = try!(BoneTimeline::from_json(timelines));
+                abones.push((index, timeline));
             }
         }
 
@@ -152,7 +153,8 @@ impl Animation {
         for jslots in animation.slots.into_iter() {
             for (name, timelines) in jslots.into_iter() {
                 let index = try!(slot_index(&name, slots));
-                aslots.push((index, SlotTimeline::from_json(timelines)));
+                let timeline = try!(SlotTimeline::from_json(timelines));
+                aslots.push((index, timeline));
             }
         }
 

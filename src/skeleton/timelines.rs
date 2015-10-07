@@ -16,56 +16,56 @@ impl Interpolate for f32 {
 
 impl Interpolate for (f32, f32) {
     fn interpolate(&self, next: &Self, percent: f32) -> Self {
-        (*self.0 + percent * (*next.0 - *self.0), *self.1 + percent * (*next.1 - *self.1))
+        (self.0 + percent * (next.0 - self.0), self.1 + percent * (next.1 - self.1))
     }
 }
 
 impl Interpolate for Vec<u8> {
     fn interpolate(&self, next: &Self, percent: f32) -> Self {
-        self.iter().zip(next.iter()).map(|(&s, &n)| 
-            (s as f32).interpolate(n as f32, elapsed) as u8).collect()
+        self.iter().zip(next.iter()).map(|(&s, &n)|
+            (s as f32).interpolate(&(n as f32), percent) as u8).collect()
     }
 }
 
 /// Curve trait to define struct with curve property (unwrapped to Linear)
-pub trait Curve<T> {
+trait Curve<T> {
     fn time(&self) -> f32;
     fn curve(&self) -> json::TimelineCurve;
-    fn value(&self) -> T;
+    fn value(&self) -> Result<T, skeleton::SkeletonError>;
 }
 
 /// Macro rule to implement curve based on json structs
 /// The only non trivial property is the `value`
 macro_rules! impl_curve {
     ($to:ty, $from:ty, $f:expr) => {
-        impl Curve for $to {
+        impl Curve<$from> for $to {
             fn time(&self) -> f32 {
                 self.time
             }
             fn curve(&self) -> json::TimelineCurve {
-                self.curve.unwrap_or(json::TimelineCurve::CurveLinear)
+                self.curve.clone().unwrap_or(json::TimelineCurve::CurveLinear)
             }
             fn value(&self) -> Result<$from, skeleton::SkeletonError> {
-                f(&self)
+                $f(&self)
             }
         }
     }
 }
 
-impl_curve!(json::BoneTranslateTimeline, (f32, f32), |t: &json::BoneTranslateTimeline| { 
+impl_curve!(json::BoneTranslateTimeline, (f32, f32), |t: &json::BoneTranslateTimeline| {
     Ok((t.x.unwrap_or(0f32), t.y.unwrap_or(0f32)))
 });
 
-impl_curve!(json::BoneScaleTimeline, (f32, f32), |t: &json::BoneScaleTimeline| { 
+impl_curve!(json::BoneScaleTimeline, (f32, f32), |t: &json::BoneScaleTimeline| {
     Ok((t.x.unwrap_or(1f32), t.y.unwrap_or(1f32)))
 });
 
-impl_curve!(json::BoneRotateTimeline, f32, |t: &json::BoneRotateTimeline| { 
+impl_curve!(json::BoneRotateTimeline, f32, |t: &json::BoneRotateTimeline| {
     Ok(t.angle.unwrap_or(0f32))
 });
 
 impl_curve!(json::SlotColorTimeline, Vec<u8>, |t: &json::SlotColorTimeline| {
-    try!(t.color.unwrap_or("FFFFFFFF".into()).from_hex())
+    t.color.clone().unwrap_or("FFFFFFFF".into()).from_hex().map_err(|e| skeleton::SkeletonError::from(e))
 });
 
 pub struct CurveTimeline<T> {
@@ -75,16 +75,16 @@ pub struct CurveTimeline<T> {
     value: T,
 }
 
-impl CurveTimeline<T> {
+impl<T> CurveTimeline<T> {
 
     /// interpolation values (x, y)
     /// Sets the control handle positions for an interpolation bezier curve used to transition
     /// from this keyframe to the next.
     /// cx1 and cx2 are from 0 to 1, representing the percent of time between the two keyframes.
     /// cy1 and cy2 are the percent of the difference between the keyframe's values.
-    fn compute_points(curve: json::TimelineCurve) -> Option<(Vec<f32>, Vec<f32>)> {
+    fn compute_points(curve: &json::TimelineCurve) -> Option<(Vec<f32>, Vec<f32>)> {
 
-        let (cx1, cy1, cx2, cy2) = match curve {
+        let (cx1, cy1, cx2, cy2) = match *curve {
             json::TimelineCurve::CurveStepped |
             json::TimelineCurve::CurveLinear  => return None, // no interpolation: early return
             json::TimelineCurve::CurveBezier(ref p)  => (p[0], p[1], p[2], p[3])
@@ -119,10 +119,10 @@ impl CurveTimeline<T> {
     /// Get percent conversion depending on curve type
     fn get_percent(&self, percent: f32) -> f32 {
 
-        let (x, y) = match *self.curve() {
+        let &(ref x,  ref y) = match self.curve {
             json::TimelineCurve::CurveStepped => return 0f32,
             json::TimelineCurve::CurveLinear  => return percent,
-            json::TimelineCurve::CurveBezier(..)  => self.interpolations.unwrap()
+            json::TimelineCurve::CurveBezier(..)  => self.points.as_ref().unwrap()
         };
 
         // bezier curve
@@ -139,11 +139,11 @@ struct CurveTimelines<T> {
     timelines: Vec<CurveTimeline<T>>
 }
 
-impl CurveTimelines<T: Interpolate> {
+impl<T: Interpolate + Clone> CurveTimelines<T> {
 
     /// Converts vector of json timelines to vector or timelines
-    fn from_json_vec<U: Curve<T>> (jtimelines: Option<Vec<U>>) 
-        -> Result<CurveTimelines<T>, skeleton::SkeletonError> 
+    fn from_json_vec<U: Curve<T>> (jtimelines: Option<Vec<U>>)
+        -> Result<CurveTimelines<T>, skeleton::SkeletonError>
     {
     	match jtimelines {
     	    None => Ok(CurveTimelines { timelines: Vec::new() }),
@@ -152,7 +152,7 @@ impl CurveTimelines<T: Interpolate> {
     	        for t in timelines.into_iter() {
     	            let value = try!(t.value());
     	            let curve = t.curve();
-    	            let points = CurveTimeline::compute_points(&curve);
+    	            let points = CurveTimeline::<T>::compute_points(&curve);
     	            curves.push(CurveTimeline {
     	                time: t.time(),
                         curve: curve,
@@ -164,19 +164,19 @@ impl CurveTimelines<T: Interpolate> {
     	    }
     	}
     }
-    
+
     /// interpolates `value` in the interval containing elapsed
     fn interpolate(&self, elapsed: f32) -> Option<T> {
     	if self.timelines.len() == 0 || elapsed < self.timelines[0].time {
     	    return None;
     	}
-    	
-    	if let Some(w) in self.timelines.window(2).find(|&w| w[0] >= elapsed) {
-    	    let percent = 1f32 - (time - w[0].time) / (w[1].time - w[0].time);
+
+    	if let Some(w) = self.timelines.windows(2).find(|&w| w[0].time >= elapsed) {
+    	    let percent = 1f32 - (elapsed - w[0].time) / (w[1].time - w[0].time);
     	    let curve_percent = w[0].get_percent(percent);
     	    Some(w[0].value.interpolate(&w[1].value, percent))
     	} else {
-    	    Some(self.timelines[timelines.len() - 1].value)
+    	    Some(self.timelines[self.timelines.len() - 1].value.clone())
     	}
     }
 }
@@ -190,8 +190,8 @@ pub struct BoneTimeline {
 impl BoneTimeline {
 
     /// converts json data into BoneTimeline
-    pub fn from_json(json: json::BoneTimeline) 
-        -> Result<BoneTimeline, skeleton::SkeletonError>  
+    pub fn from_json(json: json::BoneTimeline)
+        -> Result<BoneTimeline, skeleton::SkeletonError>
     {
         let translate = try!(CurveTimelines::from_json_vec(json.translate));
         let rotate = try!(CurveTimelines::from_json_vec(json.rotate));
@@ -202,12 +202,12 @@ impl BoneTimeline {
             scale: scale,
         })
     }
-    
-    /// evaluates the interpolations for elapsed time on all timelines and 
+
+    /// evaluates the interpolations for elapsed time on all timelines and
     /// returns the corresponding srt
     pub fn srt(&self, elapsed: f32) -> skeleton::SRT {
     	let translation = self.translate.interpolate(elapsed).unwrap_or((0f32, 0f32));
-    	let rotation = self.rotation.interpolate(elapsed).unwrap_or(0f32);
+    	let rotation = self.rotate.interpolate(elapsed).unwrap_or(0f32);
     	let scale = self.scale.interpolate(elapsed).unwrap_or((1f32, 1f32));
     	skeleton::SRT {
     	    scale: scale,
@@ -219,7 +219,7 @@ impl BoneTimeline {
 
 pub struct SlotTimeline {
     attachment: Option<Vec<json::SlotAttachmentTimeline>>,
-    color: CurveTimeline<Vec<u8>>,
+    color: CurveTimelines<Vec<u8>>,
 }
 
 impl SlotTimeline {
@@ -231,6 +231,6 @@ impl SlotTimeline {
         })
     }
     pub fn interpolated_color(&self, elapsed: f32) -> Vec<u8> {
-        self.color.interpolate(elapsed).unwrap_or(vec![255, 255, 255, 255]);
+        self.color.interpolate(elapsed).unwrap_or(vec![255, 255, 255, 255])
     }
 }
