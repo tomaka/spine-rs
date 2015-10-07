@@ -1,69 +1,92 @@
 use json;
+use skeleton;
 use serialize::hex::FromHex;
 
 const BEZIER_SEGMENTS: usize = 10;
 
-/// Timeline trait to define struct with time property
-pub trait Timeline {
-    /// return time value
-    fn time(&self) -> f32;
+trait Interpolate {
+    fn interpolate(&self, next: &Self, percent: f32) -> Self;
 }
 
-macro_rules! impl_timeline {
-    ($struct_name:ty) => {
-        impl Timeline for $struct_name {
+impl Interpolate for f32 {
+    fn interpolate(&self, next: &Self, percent: f32) -> Self {
+        *self + percent * (*next - *self)
+    }
+}
+
+impl Interpolate for (f32, f32) {
+    fn interpolate(&self, next: &Self, percent: f32) -> Self {
+        (*self.0 + percent * (*next.0 - *self.0), *self.1 + percent * (*next.1 - *self.1))
+    }
+}
+
+impl Interpolate for Vec<u8> {
+    fn interpolate(&self, next: &Self, percent: f32) -> Self {
+        self.iter().zip(next.iter()).map(|(&s, &n)| 
+            (s as f32).interpolate(n as f32, elapsed) as u8).collect()
+    }
+}
+
+/// Curve trait to define struct with curve property (unwrapped to Linear)
+pub trait Curve<T> {
+    fn time(&self) -> f32;
+    fn curve(&self) -> json::TimelineCurve;
+    fn value(&self) -> T;
+}
+
+/// Macro rule to implement curve based on json structs
+/// The only non trivial property is the `value`
+macro_rules! impl_curve {
+    ($to:ty, $from:ty, $f:expr) => {
+        impl Curve for $to {
             fn time(&self) -> f32 {
                 self.time
+            }
+            fn curve(&self) -> json::TimelineCurve {
+                self.curve.unwrap_or(json::TimelineCurve::CurveLinear)
+            }
+            fn value(&self) -> Result<$from, skeleton::SkeletonError> {
+                f(&self)
             }
         }
     }
 }
 
-impl_timeline!(json::SlotAttachmentTimeline);
-impl_timeline!(json::EventKeyframe);
-impl_timeline!(json::DrawOrderTimeline);
+impl_curve!(json::BoneTranslateTimeline, (f32, f32), |t: &json::BoneTranslateTimeline| { 
+    Ok((t.x.unwrap_or(0f32), t.y.unwrap_or(0f32)))
+});
 
-pub struct BoneTimeline {
-    pub translate: Option<Vec<BoneTranslateTimeline>>,
-    pub rotate: Option<Vec<BoneRotateTimeline>>,
-    pub scale: Option<Vec<BoneScaleTimeline>>,
+impl_curve!(json::BoneScaleTimeline, (f32, f32), |t: &json::BoneScaleTimeline| { 
+    Ok((t.x.unwrap_or(1f32), t.y.unwrap_or(1f32)))
+});
+
+impl_curve!(json::BoneRotateTimeline, f32, |t: &json::BoneRotateTimeline| { 
+    Ok(t.angle.unwrap_or(0f32))
+});
+
+impl_curve!(json::SlotColorTimeline, Vec<u8>, |t: &json::SlotColorTimeline| {
+    try!(t.color.unwrap_or("FFFFFFFF".into()).from_hex())
+});
+
+pub struct CurveTimeline<T> {
+    time: f32,
+    curve: json::TimelineCurve,
+    points: Option<(Vec<f32>, Vec<f32>)>,    // bezier curve interpolations points
+    value: T,
 }
 
-impl BoneTimeline {
-    pub fn from_json(json: json::BoneTimeline) -> BoneTimeline {
-        BoneTimeline {
-            translate: json.translate.map(|t| t.into_iter()
-                .map(|t| BoneTranslateTimeline::from_json(t)).collect()),
-            scale: json.scale.map(|t| t.into_iter()
-                .map(|t| BoneScaleTimeline::from_json(t)).collect()),
-            rotate: json.rotate.map(|t| t.into_iter()
-                .map(|t| BoneRotateTimeline::from_json(t)).collect()),
-        }
-    }
-}
-
-/// Timeline with curve
-pub trait CurveTimeline {
-
-    /// return time value
-    fn time(&self) -> f32;
-
-    /// curve definition
-    fn curve(&self) -> &json::TimelineCurve;
-
-    /// all interpolations
-    fn interpolations(&self) -> Option<(&[f32], &[f32])>;
+impl CurveTimeline<T> {
 
     /// interpolation values (x, y)
     /// Sets the control handle positions for an interpolation bezier curve used to transition
     /// from this keyframe to the next.
-	/// cx1 and cx2 are from 0 to 1, representing the percent of time between the two keyframes.
+    /// cx1 and cx2 are from 0 to 1, representing the percent of time between the two keyframes.
     /// cy1 and cy2 are the percent of the difference between the keyframe's values.
-    fn interpolate(&self) -> Option<(Vec<f32>, Vec<f32>)> {
+    fn compute_points(curve: json::TimelineCurve) -> Option<(Vec<f32>, Vec<f32>)> {
 
-        let (cx1, cy1, cx2, cy2) = match *self.curve() {
+        let (cx1, cy1, cx2, cy2) = match curve {
             json::TimelineCurve::CurveStepped |
-            json::TimelineCurve::CurveLinear  => return None,
+            json::TimelineCurve::CurveLinear  => return None, // no interpolation: early return
             json::TimelineCurve::CurveBezier(ref p)  => (p[0], p[1], p[2], p[3])
         };
 
@@ -84,11 +107,11 @@ pub trait CurveTimeline {
             vec_x.push(x);
             vec_y.push(y);
             dfx += ddfx;
-			dfy += ddfy;
-			ddfx += dddfx;
-			ddfy += dddfy;
-			x += dfx;
-			y += dfy;
+            dfy += ddfy;
+            ddfx += dddfx;
+            ddfy += dddfy;
+            x += dfx;
+            y += dfy;
         }
         Some((vec_x, vec_y))
     }
@@ -99,7 +122,7 @@ pub trait CurveTimeline {
         let (x, y) = match *self.curve() {
             json::TimelineCurve::CurveStepped => return 0f32,
             json::TimelineCurve::CurveLinear  => return percent,
-            json::TimelineCurve::CurveBezier(..)  => self.interpolations().unwrap()
+            json::TimelineCurve::CurveBezier(..)  => self.interpolations.unwrap()
         };
 
         // bezier curve
@@ -111,127 +134,103 @@ pub trait CurveTimeline {
     }
 }
 
-macro_rules! impl_curve_timeline {
-    ($struct_name:ty) => {
-        impl CurveTimeline for $struct_name {
-            fn time(&self) -> f32 {
-                self.time
-            }
-            fn curve(&self) -> &json::TimelineCurve {
-                &self.curve
-            }
-            fn interpolations(&self) -> Option<(&[f32], &[f32])> {
-                self.interpolations.as_ref().map(|&(ref x, ref y)| (x as &[f32], y as &[f32]))
-            }
-        }
+/// Set of timelines
+struct CurveTimelines<T> {
+    timelines: Vec<CurveTimeline<T>>
+}
+
+impl CurveTimelines<T: Interpolate> {
+
+    /// Converts vector of json timelines to vector or timelines
+    fn from_json_vec<U: Curve<T>> (jtimelines: Option<Vec<U>>) 
+        -> Result<CurveTimelines<T>, skeleton::SkeletonError> 
+    {
+    	match jtimelines {
+    	    None => Ok(CurveTimelines { timelines: Vec::new() }),
+    	    Some(timelines) => {
+    	        let mut curves = Vec::with_capacity(timelines.len());
+    	        for t in timelines.into_iter() {
+    	            let value = try!(t.value());
+    	            let curve = t.curve();
+    	            let points = CurveTimeline::compute_points(&curve);
+    	            curves.push(CurveTimeline {
+    	                time: t.time(),
+                        curve: curve,
+                        value: value,
+                        points: points
+    	            });
+    	        }
+    	        Ok(CurveTimelines { timelines: curves })
+    	    }
+    	}
+    }
+    
+    /// interpolates `value` in the interval containing elapsed
+    fn interpolate(&self, elapsed: f32) -> Option<T> {
+    	if self.timelines.len() == 0 || elapsed < self.timelines[0].time {
+    	    return None;
+    	}
+    	
+    	if let Some(w) in self.timelines.window(2).find(|&w| w[0] >= elapsed) {
+    	    let percent = 1f32 - (time - w[0].time) / (w[1].time - w[0].time);
+    	    let curve_percent = w[0].get_percent(percent);
+    	    Some(w[0].value.interpolate(&w[1].value, percent))
+    	} else {
+    	    Some(self.timelines[timelines.len() - 1].value)
+    	}
     }
 }
 
-pub struct BoneTranslateTimeline {
-    time: f32,
-    curve: json::TimelineCurve,
-    x: f32,
-    y: f32,
-    // bezier curve interpolations
-    interpolations: Option<(Vec<f32>, Vec<f32>)>
+pub struct BoneTimeline {
+    translate: CurveTimelines<(f32, f32)>,
+    rotate: CurveTimelines<f32>,
+    scale: CurveTimelines<(f32, f32)>,
 }
 
-impl_curve_timeline!(BoneTranslateTimeline);
+impl BoneTimeline {
 
-impl BoneTranslateTimeline {
-    fn from_json(jtimeline: json::BoneTranslateTimeline) -> BoneTranslateTimeline {
-        let mut timeline = BoneTranslateTimeline {
-            time: jtimeline.time,
-            curve: jtimeline.curve.unwrap_or(json::TimelineCurve::CurveLinear),
-            x: jtimeline.x.unwrap_or(0f32),
-            y: jtimeline.y.unwrap_or(0f32),
-            interpolations: None
-        };
-        timeline.interpolations = timeline.interpolate();
-        timeline
+    /// converts json data into BoneTimeline
+    pub fn from_json(json: json::BoneTimeline) 
+        -> Result<BoneTimeline, skeleton::SkeletonError>  
+    {
+        let translate = try!(CurveTimelines::from_json_vec(json.translate));
+        let rotate = try!(CurveTimelines::from_json_vec(json.rotate));
+        let scale = try!(CurveTimelines::from_json_vec(json.scale));
+        Ok(BoneTimeline {
+            translate: translate,
+            rotate: rotate,
+            scale: scale,
+        })
     }
-}
-
-pub struct BoneRotateTimeline {
-    time: f32,
-    curve: json::TimelineCurve,
-    angle: f32,
-    interpolations: Option<(Vec<f32>, Vec<f32>)>
-}
-
-impl_curve_timeline!(BoneRotateTimeline);
-
-impl BoneRotateTimeline {
-    fn from_json(jtimeline: json::BoneRotateTimeline) -> BoneRotateTimeline {
-        let mut timeline = BoneRotateTimeline {
-            time: jtimeline.time,
-            curve: jtimeline.curve.unwrap_or(json::TimelineCurve::CurveLinear),
-            angle: jtimeline.angle.unwrap_or(0f32),
-            interpolations: None
-        };
-        timeline.interpolations = timeline.interpolate();
-        timeline
-    }
-}
-
-pub struct BoneScaleTimeline {
-    time: f32,
-    curve: json::TimelineCurve,
-    x: f32,
-    y: f32,
-    interpolations: Option<(Vec<f32>, Vec<f32>)>
-}
-
-impl_curve_timeline!(BoneScaleTimeline);
-
-impl BoneScaleTimeline {
-    fn from_json(jtimeline: json::BoneScaleTimeline) -> BoneScaleTimeline {
-        let mut timeline = BoneScaleTimeline {
-            time: jtimeline.time,
-            curve: jtimeline.curve.unwrap_or(json::TimelineCurve::CurveLinear),
-            x: jtimeline.x.unwrap_or(1f32),
-            y: jtimeline.y.unwrap_or(1f32),
-            interpolations: None
-        };
-        timeline.interpolations = timeline.interpolate();
-        timeline
-    }
-}
-
-pub struct SlotColorTimeline {
-    time: f32,
-    color: Vec<u8>,
-    curve: json::TimelineCurve,
-    interpolations: Option<(Vec<f32>, Vec<f32>)>
-}
-
-impl_curve_timeline!(SlotColorTimeline);
-
-impl SlotColorTimeline {
-    fn from_json(jtimeline: json::SlotColorTimeline) -> SlotColorTimeline {
-        let color = jtimeline.color.unwrap_or("FFFFFFFF".into());
-        let mut timeline = SlotColorTimeline {
-            time: jtimeline.time,
-            curve: jtimeline.curve.unwrap_or(json::TimelineCurve::CurveLinear),
-            color: color.from_hex().unwrap(),
-            interpolations: None
-        };
-        timeline.interpolations = timeline.interpolate();
-        timeline
+    
+    /// evaluates the interpolations for elapsed time on all timelines and 
+    /// returns the corresponding srt
+    pub fn srt(&self, elapsed: f32) -> skeleton::SRT {
+    	let translation = self.translate.interpolate(elapsed).unwrap_or((0f32, 0f32));
+    	let rotation = self.rotation.interpolate(elapsed).unwrap_or(0f32);
+    	let scale = self.scale.interpolate(elapsed).unwrap_or((1f32, 1f32));
+    	skeleton::SRT {
+    	    scale: scale,
+    	    translation: translation,
+    	    rotation: rotation
+    	}
     }
 }
 
 pub struct SlotTimeline {
-    pub attachment: Option<Vec<json::SlotAttachmentTimeline>>,
-    pub color: Option<Vec<SlotColorTimeline>>,
+    attachment: Option<Vec<json::SlotAttachmentTimeline>>,
+    color: CurveTimeline<Vec<u8>>,
 }
 
 impl SlotTimeline {
-    pub fn from_json(json: json::SlotTimeline) -> SlotTimeline {
-        SlotTimeline {
+    pub fn from_json(json: json::SlotTimeline) -> Result<SlotTimeline, skeleton::SkeletonError> {
+        let color = try!(CurveTimelines::from_json_vec(json.color));
+        Ok(SlotTimeline {
             attachment: json.attachment,
-            color: json.color.map(|c| c.into_iter()
-                .map(|c| SlotColorTimeline::from_json(c)).collect())
-        }
+            color: color
+        })
+    }
+    pub fn interpolated_color(&self, elapsed: f32) -> Vec<u8> {
+        self.color.interpolate(elapsed).unwrap_or(vec![255, 255, 255, 255]);
     }
 }
