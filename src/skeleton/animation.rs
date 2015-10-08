@@ -41,11 +41,6 @@ impl<'a> AnimationIter<'a> {
 
 }
 
-pub struct AnimationItem {
-    srt: skeleton::SRT,
-    slot: skeleton::Slot
-}
-
 impl<'a> Iterator for AnimationIter<'a> {
     type Item = Vec<(String, skeleton::SRT)>;
 
@@ -76,8 +71,8 @@ impl<'a> Iterator for AnimationIter<'a> {
                 srt.position.0 += anim_srt.position.0;
                 srt.position.1 += anim_srt.position.1;
                 srt.rotation += anim_srt.rotation;
-                srt.scale.0 += anim_srt.scale.0;
-                srt.scale.1 += anim_srt.scale.1;
+                srt.scale.0 *= anim_srt.scale.0;
+                srt.scale.1 *= anim_srt.scale.1;
             }
 
             srts.push(srt)
@@ -98,8 +93,8 @@ impl<'a> Iterator for AnimationIter<'a> {
                 srt.position.0 += skin_attach.srt.position.0;
                 srt.position.1 += skin_attach.srt.position.1;
                 srt.rotation += skin_attach.srt.rotation;
-                srt.scale.0 += skin_attach.srt.scale.0;
-                srt.scale.1 += skin_attach.srt.scale.1;
+                srt.scale.0 *= skin_attach.srt.scale.0;
+                srt.scale.1 *= skin_attach.srt.scale.1;
 
                 let attach_name = skin_attach.name.clone().unwrap_or(slot.attachment.clone().unwrap());
                 result.push((attach_name, srt));
@@ -110,7 +105,7 @@ impl<'a> Iterator for AnimationIter<'a> {
         }
 
         // increase time
-        self.time += 0.1f32;
+        self.time += 0.01f32;
 
         Some(result)
     }

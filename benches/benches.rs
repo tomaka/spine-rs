@@ -45,3 +45,27 @@ fn animation_skeleton(bencher: &mut test::Bencher) {
         }
     })
 }
+
+
+#[bench]
+fn animation_all(bencher: &mut test::Bencher) {
+    let src: &[u8] = include_bytes!("../tests/example.json");
+    let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
+
+    bencher.iter(|| {
+        (0..100).map(|t| doc.calculate("default", Some("walk"), t as f32 /100f32)).collect::<Vec<_>>();
+    })
+}
+
+#[bench]
+fn animation_skeleton_all(bencher: &mut test::Bencher) {
+
+    let src: &[u8] = include_bytes!("../tests/example.json");
+    let doc = spine::Skeleton::from_reader(BufReader::new(src)).unwrap();
+
+    bencher.iter(|| {
+        if let Ok(mut anim) = doc.iter("default", Some("walk")) {
+            anim.nth(100);
+        }
+    })
+}
