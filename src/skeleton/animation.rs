@@ -43,9 +43,9 @@ impl<'a> AnimationIter<'a> {
 }
 
 impl<'a> Iterator for AnimationIter<'a> {
-    type Item = Vec<(String, skeleton::SRT)>;
+    type Item = Vec<(String, skeleton::SRT, Vec<u8>)>;
 
-    fn next(&mut self) -> Option<Vec<(String, skeleton::SRT)>> {
+    fn next(&mut self) -> Option<Vec<(String, skeleton::SRT, Vec<u8>)>> {
 
         // escape if exceeds animation time
         if self.time > self.animation.map(|anim| anim.duration).unwrap_or(0f32) {
@@ -88,7 +88,7 @@ impl<'a> Iterator for AnimationIter<'a> {
                 .and_then(|slot_attach|
                     // TODO: find a better way to store skins
                     self.skin.find(i, &slot_attach)
-                    .or_else(|| self.skin.find(i, &slot_attach))) {
+                    .or_else(|| self.default_skin.find(i, &slot_attach))) {
 
                 let mut srt = srts[slot.bone_index].clone();
                 srt.position.0 += skin_attach.srt.position.0;
@@ -97,10 +97,16 @@ impl<'a> Iterator for AnimationIter<'a> {
                 srt.scale.0 *= skin_attach.srt.scale.0;
                 srt.scale.1 *= skin_attach.srt.scale.1;
 
-                let attach_name = skin_attach.name.clone().unwrap_or(slot.attachment.clone().unwrap());
-                result.push((attach_name, srt));
+                // color
+                let color = self.animation
+                    .and_then(|anim| anim.slots.iter().find(|&&(idx, _)| idx == i ))
+                    .map(|&(_, ref anim)| (*anim).interpolate_color(self.time))
+                    .unwrap_or(vec![255, 255, 255, 255]);
 
-                // TODO: change color and attachment if animating
+                let attach_name = skin_attach.name.clone().unwrap_or(slot.attachment.clone().unwrap());
+                result.push((attach_name, srt, color));
+
+                // TODO: change attachment if animating
             }
 
         }

@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::f32::consts::PI;
 use serialize::hex::FromHex;
-use std::error::Error;
 
 // Reexport skeleton modules
 pub use self::error::SkeletonError;
@@ -68,7 +67,7 @@ impl Skeleton {
         let mut slots = Vec::new();
         if let Some(jslots) = doc.slots {
             for s in jslots.into_iter() {
-                let slot = try!(Slot::from_json(s, &bones, &slots));
+                let slot = try!(Slot::from_json(s, &bones));
                 slots.push(slot);
             }
         }
@@ -235,18 +234,13 @@ pub struct Slot {
 }
 
 impl Slot {
-    fn from_json(slot: json::Slot, bones: &[Bone], slots: &[Slot]) -> Result<Slot, SkeletonError> {
+    fn from_json(slot: json::Slot, bones: &[Bone]) -> Result<Slot, SkeletonError> {
         let bone_index = try!(bone_index(&slot.bone, &bones));
         let color = try!(slot.color.unwrap_or("FFFFFFFF".into()).from_hex());
-        // let attachment = match slot.attachment {
-        //     Some(jslot) => Some(try!(slot_index(&jslot, &slots))),
-        //     None => None
-        // };
         Ok(Slot {
             name: slot.name,
             bone_index: bone_index,
             color: color,
-            // attachment: attachment
             attachment: slot.attachment
         })
     }

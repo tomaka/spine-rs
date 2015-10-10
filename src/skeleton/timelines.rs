@@ -230,7 +230,7 @@ impl SlotTimeline {
             color: color
         })
     }
-    pub fn interpolated_color(&self, elapsed: f32) -> Vec<u8> {
+    pub fn interpolate_color(&self, elapsed: f32) -> Vec<u8> {
         self.color.interpolate(elapsed).unwrap_or(vec![255, 255, 255, 255])
     }
 }
