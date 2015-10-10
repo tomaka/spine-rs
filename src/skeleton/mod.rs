@@ -11,11 +11,12 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::f32::consts::PI;
 use serialize::hex::FromHex;
+use std::error::Error;
 
 // Reexport skeleton modules
-pub use self::error::*;
-use self::timelines::*;
-use self::animation::*;
+pub use self::error::SkeletonError;
+use self::timelines::{BoneTimeline, SlotTimeline};
+use self::animation::AnimationIter;
 
 const TO_RADIAN: f32 = PI / 180f32;
 
@@ -42,13 +43,11 @@ pub struct Skeleton {
 impl Skeleton {
 
     /// Consumes reader (with json data) and returns a skeleton wrapping
-    pub fn from_reader<R: Read>(mut reader: R) -> Result<Skeleton, String> {
+    pub fn from_reader<R: Read>(mut reader: R) -> Result<Skeleton, SkeletonError> {
 
         // read and convert as json
-        let document = try!(from_json::Json::from_reader(&mut reader)
-            .map_err(|e| format!("{:?}", e)));
-        let document: json::Document = try!(from_json::FromJson::from_json(&document)
-            .map_err(|e| format!("{:?}", e)));
+        let document = try!(from_json::Json::from_reader(&mut reader));
+        let document: json::Document = try!(from_json::FromJson::from_json(&document));
 
         // convert to skeleton (consumes document)
         Skeleton::from_json(document)
@@ -56,7 +55,7 @@ impl Skeleton {
 
     /// Creates a from_json skeleton
     /// Consumes json::Document
-    fn from_json(doc: json::Document) -> Result<Skeleton, String> {
+    fn from_json(doc: json::Document) -> Result<Skeleton, SkeletonError> {
 
         let mut bones = Vec::new();
         if let Some(jbones) = doc.bones {
@@ -108,10 +107,10 @@ impl Skeleton {
     }
 
     /// Iterator<Item=Vec<Slot>> where item are modified with timelines
-    pub fn iter<'a>(&'a self, skin: &str, animation: Option<&str>)
+    pub fn iter<'a>(&'a self, skin: &str, animation: Option<&str>, delta: f32)
         -> Result<AnimationIter<'a>, SkeletonError>
     {
-        AnimationIter::new(self, skin, animation)
+        AnimationIter::new(self, skin, animation, delta)
     }
 
 }

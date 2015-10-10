@@ -40,7 +40,7 @@ fn animation_skeleton(bencher: &mut test::Bencher) {
     let doc = spine::Skeleton::from_reader(BufReader::new(src)).unwrap();
 
     bencher.iter(|| {
-        if let Ok(mut anim) = doc.iter("default", Some("walk")) {
+        if let Ok(mut anim) = doc.iter("default", Some("walk"), 0.01) {
             anim.next();
         }
     })
@@ -64,7 +64,7 @@ fn animation_skeleton_all(bencher: &mut test::Bencher) {
     let doc = spine::Skeleton::from_reader(BufReader::new(src)).unwrap();
 
     bencher.iter(|| {
-        if let Ok(mut anim) = doc.iter("default", Some("walk")) {
+        if let Ok(mut anim) = doc.iter("default", Some("walk"), 0.01) {
             anim.nth(100);
         }
     })

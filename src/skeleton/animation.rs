@@ -1,19 +1,19 @@
 use skeleton;
 use skeleton::error::SkeletonError;
-use std::collections::HashSet;
 
 pub struct AnimationIter<'a> {
     time: f32,
     skeleton: &'a skeleton::Skeleton,
     animation: Option<&'a skeleton::Animation>,
     skin: &'a skeleton::Skin,
-    default_skin: &'a skeleton::Skin
+    default_skin: &'a skeleton::Skin,
+    delta: f32
 }
 
 impl<'a> AnimationIter<'a> {
 
     /// Iterator<Item=Vec<Slot>> where item are modified with timelines
-    pub fn new(skeleton: &'a skeleton::Skeleton, skin: &str, animation: Option<&str>)
+    pub fn new(skeleton: &'a skeleton::Skeleton, skin: &str, animation: Option<&str>, delta: f32)
         -> Result<AnimationIter<'a>, SkeletonError>
     {
         // try getting skins
@@ -35,7 +35,8 @@ impl<'a> AnimationIter<'a> {
             skeleton: skeleton,
             animation: animation,
             skin: skin,
-            default_skin: default_skin
+            default_skin: default_skin,
+            delta: delta
         })
     }
 
@@ -105,7 +106,7 @@ impl<'a> Iterator for AnimationIter<'a> {
         }
 
         // increase time
-        self.time += 0.01f32;
+        self.time += self.delta;
 
         Some(result)
     }

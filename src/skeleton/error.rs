@@ -1,7 +1,19 @@
 use serialize::hex::FromHexError;
+use serialize::json::ParserError;
+use std::fmt;
+use std::error::Error;
+use from_json::FromJsonError;
 
 /// Error that can happen while calculating an animation.
+#[derive(Debug)]
 pub enum SkeletonError {
+
+    /// Parser error
+    ParserError(ParserError),
+
+    /// Parser error
+    FromJsonError(FromJsonError),
+
     /// The requested bone was not found.
     BoneNotFound(String),
 
@@ -12,26 +24,46 @@ pub enum SkeletonError {
     SkinNotFound(String),
 
     /// The requested slot was not found.
-    InvalidColor(String),
+    InvalidColor(FromHexError),
 
     /// The requested animation was not found.
     AnimationNotFound(String),
 }
 
-impl From<SkeletonError> for String {
-    fn from(error: SkeletonError) -> String {
-        match error {
-            SkeletonError::BoneNotFound(b) => format!("Cannot find bone '{}'", &b),
-            SkeletonError::SlotNotFound(s) => format!("Cannot find slot '{}'", &s),
-            SkeletonError::SkinNotFound(s) => format!("Cannot find skin '{}'", &s),
-            SkeletonError::InvalidColor(s) => format!("Cannot convert '{}' into a color", &s),
-            SkeletonError::AnimationNotFound(s) => format!("Cannot find animation '{}'", &s),
+impl fmt::Display for SkeletonError {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        self.description().fmt(formatter)
+    }
+}
+
+impl Error for SkeletonError {
+    fn description(&self) -> &str {
+        match self {
+            &SkeletonError::BoneNotFound(_) => "Bone name cannot be found in skeleton bones",
+            &SkeletonError::SlotNotFound(_) => "Slot name cannot be found in skeleton slots",
+            &SkeletonError::SkinNotFound(_) => "Skin name cannot be found in skeleton skins",
+            &SkeletonError::InvalidColor(_) => "Color cannot be parsed",
+            &SkeletonError::AnimationNotFound(_) => "Animation name cannot be found in skeleton animations",
+            &SkeletonError::FromJsonError(_) => "Error while parsing json skeleton",
+            &SkeletonError::ParserError(_) => "Error while parsing json skeleton",
         }
     }
 }
 
 impl From<FromHexError> for SkeletonError {
     fn from(error: FromHexError) -> SkeletonError {
-        SkeletonError::InvalidColor(format!("{:?}", error))
+        SkeletonError::InvalidColor(error)
+    }
+}
+
+impl From<ParserError> for SkeletonError {
+    fn from(error: ParserError) -> SkeletonError {
+        SkeletonError::ParserError(error)
+    }
+}
+
+impl From<FromJsonError> for SkeletonError {
+    fn from(error: FromJsonError) -> SkeletonError {
+        SkeletonError::FromJsonError(error)
     }
 }

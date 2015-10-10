@@ -68,7 +68,7 @@ impl_curve!(json::SlotColorTimeline, Vec<u8>, |t: &json::SlotColorTimeline| {
     t.color.clone().unwrap_or("FFFFFFFF".into()).from_hex().map_err(|e| skeleton::SkeletonError::from(e))
 });
 
-pub struct CurveTimeline<T> {
+struct CurveTimeline<T> {
     time: f32,
     curve: json::TimelineCurve,
     points: Option<(Vec<f32>, Vec<f32>)>,    // bezier curve interpolations points
@@ -174,7 +174,7 @@ impl<T: Interpolate + Clone> CurveTimelines<T> {
     	if let Some(w) = self.timelines.windows(2).find(|&w| w[0].time >= elapsed) {
     	    let percent = 1f32 - (elapsed - w[0].time) / (w[1].time - w[0].time);
     	    let curve_percent = w[0].get_percent(percent);
-    	    Some(w[0].value.interpolate(&w[1].value, percent))
+    	    Some(w[0].value.interpolate(&w[1].value, curve_percent))
     	} else {
     	    Some(self.timelines[self.timelines.len() - 1].value.clone())
     	}
