@@ -1,11 +1,10 @@
 use serialize::hex::FromHexError;
 use serialize::json::ParserError;
+use from_json::FromJsonError;
 use std::fmt;
 use std::error::Error;
-use from_json::FromJsonError;
 
 /// Error that can happen while calculating an animation.
-#[derive(Debug)]
 pub enum SkeletonError {
 
     /// Parser error
@@ -30,22 +29,36 @@ pub enum SkeletonError {
     AnimationNotFound(String),
 }
 
+impl fmt::Debug for SkeletonError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            SkeletonError::BoneNotFound(ref name) => write!(f, "Cannot find bone '{}'", name),
+            SkeletonError::SlotNotFound(ref name) => write!(f, "Cannot find slot '{}'", name),
+            SkeletonError::SkinNotFound(ref name) => write!(f, "Cannot find skin '{}'", name),
+            SkeletonError::AnimationNotFound(ref name) => write!(f, "Cannot find animation '{}'", name),
+            SkeletonError::InvalidColor(ref e)  => write!(f, "Cannot convert color to hexadecimal: {:?}", e),
+            SkeletonError::FromJsonError(ref e) => write!(f, "Cannot deserialize from json: {:?}", e),
+            SkeletonError::ParserError(ref e)   => write!(f, "Cannot deserialize from json: {:?}", e),
+        }
+    }
+}
+
 impl fmt::Display for SkeletonError {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        self.description().fmt(formatter)
+        fmt::Debug::fmt(&self, formatter)
     }
 }
 
 impl Error for SkeletonError {
     fn description(&self) -> &str {
-        match self {
-            &SkeletonError::BoneNotFound(_) => "Bone name cannot be found in skeleton bones",
-            &SkeletonError::SlotNotFound(_) => "Slot name cannot be found in skeleton slots",
-            &SkeletonError::SkinNotFound(_) => "Skin name cannot be found in skeleton skins",
-            &SkeletonError::InvalidColor(_) => "Color cannot be parsed",
-            &SkeletonError::AnimationNotFound(_) => "Animation name cannot be found in skeleton animations",
-            &SkeletonError::FromJsonError(_) => "Error while parsing json skeleton",
-            &SkeletonError::ParserError(_) => "Error while parsing json skeleton",
+        match *self {
+            SkeletonError::BoneNotFound(_) => "bone cannot be found in skeleton bones",
+            SkeletonError::SlotNotFound(_) => "slot cannot be found in skeleton slots",
+            SkeletonError::SkinNotFound(_) => "skin cannot be found in skeleton skins",
+            SkeletonError::InvalidColor(_) => "color cannot be parsed",
+            SkeletonError::AnimationNotFound(_) => "animation cannot be found in skeleton animations",
+            SkeletonError::FromJsonError(_) => "error while parsing json skeleton",
+            SkeletonError::ParserError(_) => "error while parsing json skeleton",
         }
     }
 }
