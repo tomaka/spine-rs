@@ -200,6 +200,16 @@ pub struct SRT {
     position: (f32, f32),
 }
 
+impl SRT {
+    pub fn add_assign(&mut self, other: &SRT) {
+        self.position.0 += other.position.0;
+        self.position.1 += other.position.1;
+        self.rotation += other.rotation;
+        self.scale.0 *= other.scale.0;
+        self.scale.1 *= other.scale.1;
+    }
+}
+
 pub struct Bone {
     name: String,
     parent_index: Option<usize>,

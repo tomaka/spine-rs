@@ -69,11 +69,7 @@ impl<'a> Iterator for AnimationIter<'a> {
             if let Some(anim_srt) = self.animation
                 .and_then(|anim| anim.bones.iter().find(|&&(idx, _)| idx == i ))
                 .map(|&(_, ref anim)| anim.srt(self.time)) {
-                srt.position.0 += anim_srt.position.0;
-                srt.position.1 += anim_srt.position.1;
-                srt.rotation += anim_srt.rotation;
-                srt.scale.0 *= anim_srt.scale.0;
-                srt.scale.1 *= anim_srt.scale.1;
+                srt.add_assign(&anim_srt);
             }
 
             srts.push(srt)
@@ -91,11 +87,7 @@ impl<'a> Iterator for AnimationIter<'a> {
                     .or_else(|| self.default_skin.find(i, &slot_attach))) {
 
                 let mut srt = srts[slot.bone_index].clone();
-                srt.position.0 += skin_attach.srt.position.0;
-                srt.position.1 += skin_attach.srt.position.1;
-                srt.rotation += skin_attach.srt.rotation;
-                srt.scale.0 *= skin_attach.srt.scale.0;
-                srt.scale.1 *= skin_attach.srt.scale.1;
+                srt.add_assign(&skin_attach.srt);
 
                 // color
                 let color = self.animation
@@ -103,7 +95,8 @@ impl<'a> Iterator for AnimationIter<'a> {
                     .map(|&(_, ref anim)| (*anim).interpolate_color(self.time))
                     .unwrap_or(vec![255, 255, 255, 255]);
 
-                let attach_name = skin_attach.name.clone().unwrap_or(slot.attachment.clone().unwrap());
+                let attach_name = skin_attach.name.clone().or_else(|| slot.attachment.clone())
+                    .expect("no attachment name provided");
                 result.push((attach_name, srt, color));
 
                 // TODO: change attachment if animating
