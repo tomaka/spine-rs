@@ -11,7 +11,7 @@ name = "spine"
 path = "src/lib.rs"
 
 [dependencies]
-cgmath = "0.2"
+cgmath = "0.3"
 libc = "0.1"
 
 [dependencies.color]
