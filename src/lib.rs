@@ -85,8 +85,10 @@ use std::io::Read;
 
 mod json;
 mod skeleton;
+mod atlas;
 
 pub use skeleton::Skeleton;
+pub use atlas::Atlas;
 
 /// Spine document loaded in memory.
 pub struct SpineDocument {
