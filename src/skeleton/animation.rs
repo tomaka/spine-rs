@@ -1,20 +1,25 @@
 use skeleton;
 use skeleton::error::SkeletonError;
 
-pub struct AnimationIter<'a> {
-    time: f32,
+pub struct SkinAnimation<'a> {
     skeleton: &'a skeleton::Skeleton,
     animation: Option<&'a skeleton::Animation>,
     skin: &'a skeleton::Skin,
     default_skin: &'a skeleton::Skin,
-    delta: f32
+    duration: f32
 }
 
-impl<'a> AnimationIter<'a> {
+pub struct CalculatedSlot {
+    pub attachment: String,
+    pub srt: skeleton::SRT,
+    pub color: Vec<u8>
+}
 
-    /// Iterator<Item=Vec<Slot>> where item are modified with timelines
-    pub fn new(skeleton: &'a skeleton::Skeleton, skin: &str, animation: Option<&str>, delta: f32)
-        -> Result<AnimationIter<'a>, SkeletonError>
+impl<'a> SkinAnimation<'a> {
+
+    /// Iterator<Item=Vec<CalculatedSlot>> where item are modified with timelines
+    pub fn new(skeleton: &'a skeleton::Skeleton, skin: &str, animation: Option<&str>)
+        -> Result<SkinAnimation<'a>, SkeletonError>
     {
         // try getting skins
         let skin = try!(skeleton.skins.get(skin)
@@ -23,32 +28,27 @@ impl<'a> AnimationIter<'a> {
             .ok_or(SkeletonError::SkinNotFound("default".into())));
 
         // get animation
-        let animation = if let Some(animation) = animation {
-            Some(try!(skeleton.animations.get(animation)
-                .ok_or(SkeletonError::AnimationNotFound(animation.into()))))
+        let (animation, duration) = if let Some(animation) = animation {
+            let anim = try!(skeleton.animations.get(animation)
+                .ok_or(SkeletonError::AnimationNotFound(animation.into())));
+            (Some(anim), anim.duration)
         } else {
-            None
+            (None, 0f32)
         };
 
-        Ok(AnimationIter {
-            time: 0f32,
+        Ok(SkinAnimation {
             skeleton: skeleton,
             animation: animation,
             skin: skin,
             default_skin: default_skin,
-            delta: delta
+            duration: duration,
         })
     }
 
-}
+    /// Interpolates animated slots at given time
+    pub fn interpolate(&self, time: f32) -> Option<Vec<CalculatedSlot>> {
 
-impl<'a> Iterator for AnimationIter<'a> {
-    type Item = Vec<(String, skeleton::SRT, Vec<u8>)>;
-
-    fn next(&mut self) -> Option<Vec<(String, skeleton::SRT, Vec<u8>)>> {
-
-        // escape if exceeds animation time
-        if self.time > self.animation.map(|anim| anim.duration).unwrap_or(0f32) {
+        if time > self.duration {
             return None;
         }
 
@@ -68,7 +68,7 @@ impl<'a> Iterator for AnimationIter<'a> {
             // animation srt
             if let Some(anim_srt) = self.animation
                 .and_then(|anim| anim.bones.iter().find(|&&(idx, _)| idx == i ))
-                .map(|&(_, ref anim)| anim.srt(self.time)) {
+                .map(|&(_, ref anim)| anim.srt(time)) {
                 srt.add_assign(&anim_srt);
             }
 
@@ -92,22 +92,46 @@ impl<'a> Iterator for AnimationIter<'a> {
                 // color
                 let color = self.animation
                     .and_then(|anim| anim.slots.iter().find(|&&(idx, _)| idx == i ))
-                    .map(|&(_, ref anim)| (*anim).interpolate_color(self.time))
+                    .map(|&(_, ref anim)| (*anim).interpolate_color(time))
                     .unwrap_or(vec![255, 255, 255, 255]);
 
                 let attach_name = skin_attach.name.clone().or_else(|| slot.attachment.clone())
                     .expect("no attachment name provided");
-                result.push((attach_name, srt, color));
+
+                result.push(CalculatedSlot {
+                    attachment: attach_name,
+                    srt: srt,
+                    color: color
+                });
 
                 // TODO: change attachment if animating
             }
-
         }
-
-        // increase time
-        self.time += self.delta;
 
         Some(result)
     }
 
+    /// Creates an iterator which iterates slots at delta seconds interval
+    pub fn iter(&'a self, delta: f32) -> AnimationIter<'a> {
+        AnimationIter {
+            skin_animation: &self,
+            time: 0f32,
+            delta: delta
+        }
+    }
+}
+
+pub struct AnimationIter<'a> {
+    skin_animation: &'a SkinAnimation<'a>,
+    time: f32,
+    delta: f32
+}
+
+impl<'a> Iterator for AnimationIter<'a> {
+    type Item = Vec<CalculatedSlot>;
+    fn next(&mut self) -> Option<Vec<CalculatedSlot>> {
+        let result = self.skin_animation.interpolate(self.time);
+        self.time += self.delta;
+        result
+    }
 }

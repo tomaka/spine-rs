@@ -15,7 +15,7 @@ use serialize::hex::FromHex;
 // Reexport skeleton modules
 pub use self::error::SkeletonError;
 use self::timelines::{BoneTimeline, SlotTimeline};
-use self::animation::AnimationIter;
+use self::animation::SkinAnimation;
 
 const TO_RADIAN: f32 = PI / 180f32;
 
@@ -105,13 +105,12 @@ impl Skeleton {
         })
     }
 
-    /// Iterator<Item=Vec<Slot>> where item are modified with timelines
-    pub fn iter<'a>(&'a self, skin: &str, animation: Option<&str>, delta: f32)
-        -> Result<AnimationIter<'a>, SkeletonError>
+    /// Gets a SkinAnimation which can interpolate slots at a given time
+    pub fn get_animated_skin<'a>(&'a self, skin: &str, animation: Option<&str>)
+        -> Result<SkinAnimation<'a>, SkeletonError>
     {
-        AnimationIter::new(self, skin, animation, delta)
+        SkinAnimation::new(self, skin, animation)
     }
-
 }
 
 /// Skin
@@ -195,9 +194,12 @@ impl Animation {
 /// Scale, Rotate, Translate struct
 #[derive(Debug, Clone)]
 pub struct SRT {
-    scale: (f32, f32),
-    rotation: f32,
-    position: (f32, f32),
+    // scale
+    pub scale: (f32, f32),
+    // rotation
+    pub rotation: f32,
+    // position or translation
+    pub position: (f32, f32),
 }
 
 impl SRT {
