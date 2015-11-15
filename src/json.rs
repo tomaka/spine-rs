@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(non_snake_case)]
-
 use from_json;
 use std::collections::HashMap;
 
@@ -18,15 +15,18 @@ derive_from_json!(Document, bones, slots, skins, animations);
 pub struct Bone {
     pub name: String,
     pub parent: Option<String>,
-    pub length: Option<f64>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-    pub scaleX: Option<f64>,
-    pub scaleY: Option<f64>,
-    pub rotation: Option<f64>,
+    pub length: Option<f32>,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub scale_x: Option<f32>,
+    pub scale_y: Option<f32>,
+    pub rotation: Option<f32>,
+    pub inherit_scale: Option<bool>,
+    pub inherit_rotation: Option<bool>
 }
 
-derive_from_json!(Bone, name, parent, length, x, y, scaleX, scaleY, rotation);
+derive_from_json!(Bone, name, parent, length, x, y, scale_x as "scaleX", scale_y as "scaleY",
+                  rotation, inherit_scale as "inheritScale", inherit_rotation as "inheritRotation");
 
 #[derive(Debug, Clone)]
 pub struct Slot {
@@ -42,20 +42,20 @@ derive_from_json!(Slot, name, bone, color, attachment);
 pub struct Attachment {
     pub name: Option<String>,
     pub type_: Option<AttachmentType>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-    pub scaleX: Option<f64>,
-    pub scaleY: Option<f64>,
-    pub rotation: Option<f64>,
-    pub width: Option<f64>,
-    pub height: Option<f64>,
-    pub fps: Option<f64>,
-    pub mode: Option<f64>,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub scale_x: Option<f32>,
+    pub scale_y: Option<f32>,
+    pub rotation: Option<f32>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub fps: Option<f32>,
+    pub mode: Option<String>,       // TODO: add enum forward, backward etc ...
     //vertices: Option<Vec<??>>     // TODO: ?
 }
 
-derive_from_json!(Attachment, name, type_ as "type", x, y, scaleX, scaleY, rotation, width, height,
-                  fps, mode);
+derive_from_json!(Attachment, name, type_ as "type", x, y,
+                  scale_x as "scaleX", scale_y as "scaleY", rotation, width, height, fps, mode);
 
 #[derive(Debug, Clone)]
 pub enum AttachmentType {
@@ -70,7 +70,7 @@ impl from_json::FromJson for AttachmentType {
 
         let string: String = try!(FromJson::from_json(input));
 
-        match &string[..] {
+        match &*string {
             "region" => Ok(AttachmentType::Region),
             "regionsequence" => Ok(AttachmentType::RegionSequence),
             "boundingbox" => Ok(AttachmentType::BoundingBox),
@@ -83,7 +83,7 @@ impl from_json::FromJson for AttachmentType {
 pub struct Event {
     pub name: String,
     pub int_: Option<i32>,
-    pub float_: Option<f64>,
+    pub float_: Option<f32>,
     pub string: Option<String>,
 }
 
@@ -110,37 +110,38 @@ derive_from_json!(BoneTimeline, translate, rotate, scale);
 
 #[derive(Debug, Clone)]
 pub struct BoneTranslateTimeline {
-    pub time: f64,
+    pub time: f32,
     pub curve: Option<TimelineCurve>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
 }
 
 derive_from_json!(BoneTranslateTimeline, time, curve, x, y);
 
 #[derive(Debug, Clone)]
 pub struct BoneRotateTimeline {
-    pub time: f64,
+    pub time: f32,
     pub curve: Option<TimelineCurve>,
-    pub angle: Option<f64>,
+    pub angle: Option<f32>,
 }
 
 derive_from_json!(BoneRotateTimeline, time, curve, angle);
 
 #[derive(Debug, Clone)]
 pub struct BoneScaleTimeline {
-    pub time: f64,
+    pub time: f32,
     pub curve: Option<TimelineCurve>,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
 }
 
 derive_from_json!(BoneScaleTimeline, time, curve, x, y);
 
 #[derive(Debug, Clone)]
 pub enum TimelineCurve {
-    CurveBezier(Vec<f64>),
-    CurvePredefined(String),
+    CurveLinear,
+    CurveStepped,
+    CurveBezier(Vec<f32>),
 }
 
 impl from_json::FromJson for TimelineCurve {
@@ -150,7 +151,13 @@ impl from_json::FromJson for TimelineCurve {
         if input.is_array() {
             Ok(TimelineCurve::CurveBezier(try!(FromJson::from_json(input))))
         } else {
-            Ok(TimelineCurve::CurvePredefined(try!(FromJson::from_json(input))))
+            let curve_type: String = try!(FromJson::from_json(input));
+            match &curve_type[..] {
+                "linear" => Ok(TimelineCurve::CurveLinear),
+                "stepped" => Ok(TimelineCurve::CurveStepped),
+                _ => Err(from_json::FromJsonError::ExpectError(
+                    "Timeline curve must be either linear, stepped or an array", input.clone()))
+            }
         }
     }
 }
@@ -165,7 +172,7 @@ derive_from_json!(SlotTimeline, attachment, color);
 
 #[derive(Debug, Clone)]
 pub struct SlotAttachmentTimeline {
-    pub time: f64,
+    pub time: f32,
     pub name: Option<String>,
 }
 
@@ -173,7 +180,7 @@ derive_from_json!(SlotAttachmentTimeline, time, name);
 
 #[derive(Debug, Clone)]
 pub struct SlotColorTimeline {
-    pub time: f64,
+    pub time: f32,
     pub color: Option<String>,
     pub curve: Option<TimelineCurve>,
 }
@@ -182,10 +189,10 @@ derive_from_json!(SlotColorTimeline, time, color, curve);
 
 #[derive(Debug, Clone)]
 pub struct EventKeyframe {
-    time: f64,
+    pub time: f32,
     name: String,
     int_: Option<i32>,
-    float_: Option<f64>,
+    float_: Option<f32>,
     string_: Option<String>,
 }
 
@@ -194,7 +201,7 @@ derive_from_json!(EventKeyframe, time, name, int_ as "int", float_ as "float",
 
 #[derive(Debug, Clone)]
 pub struct DrawOrderTimeline {
-    time: f64,
+    pub time: f32,
     offsets: Option<Vec<DrawOrderTimelineOffset>>,
 }
 

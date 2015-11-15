@@ -3,37 +3,42 @@ extern crate spine;
 use std::io::BufReader;
 
 #[test]
-fn animations_list() {
+fn animations_names() {
     let src: &[u8] = include_bytes!("example.json");
-    let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
+    let doc = spine::skeleton::Skeleton::from_reader(BufReader::new(src)).unwrap();
 
-    assert!(doc.get_animations_list().get(0).unwrap() == &"walk" ||
-        doc.get_animations_list().get(0).unwrap() == &"jump");
-    assert!(doc.get_animations_list().get(1).unwrap() == &"walk" ||
-        doc.get_animations_list().get(1).unwrap() == &"jump");
+    let names = doc.get_animations_names();
 
-    assert!(doc.has_animation("walk"));
-    assert!(doc.has_animation("jump"));
-    assert!(!doc.has_animation("crawl"));
+    assert!(names.get(0).unwrap() == &"walk" ||
+        names.get(0).unwrap() == &"jump");
+    assert!(names.get(1).unwrap() == &"walk" ||
+        names.get(1).unwrap() == &"jump");
+
+    assert!(names.contains(&"walk"));
+    assert!(names.contains(&"jump"));
+    assert!(!names.contains(&"crawl"));
 }
 
 #[test]
-fn skins_list() {
+fn skins_names() {
     let src: &[u8] = include_bytes!("example.json");
-    let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
+    let doc = spine::skeleton::Skeleton::from_reader(BufReader::new(src)).unwrap();
+    let skins = doc.get_skins_names();
+    assert!(skins.get(0).unwrap() == &"default");
 
-    assert!(doc.get_skins_list().get(0).unwrap() == &"default");
+    assert!(skins.contains(&"default"));
+    assert!(doc.get_skin("default").is_ok());
 
-    assert!(doc.has_skin("default"));
-    assert!(!doc.has_skin("nonexisting"));
+    assert!(!skins.contains(&"nonexisting"));
+    assert!(doc.get_skin("nonexisting").is_err());
 }
 
 #[test]
-fn possible_sprites() {
+fn attachement_names() {
     let src: &[u8] = include_bytes!("example.json");
-    let doc = spine::SpineDocument::new(BufReader::new(src)).unwrap();
+    let doc = spine::skeleton::Skeleton::from_reader(BufReader::new(src)).unwrap();
 
-    let mut results = doc.get_possible_sprites();
+    let mut results = doc.get_attachments_names();
     results.sort();
 
     assert!(results == [

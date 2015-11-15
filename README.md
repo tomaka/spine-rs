@@ -11,59 +11,70 @@ extern crate spine;
 
 Parses a Spine document and calculates what needs to be drawn.
 
+You can find an example [here](https://github.com/tafia/spine-render)
+
 ## Step 1: loading the document
 
-Call `SpineDocument::new` to parse the content of a document.
+Call `skeleton::Skeleton::from_reader` to parse the content of a document.
 
 This function returns an `Err` if the document is not valid JSON or if something is not
  recognized in it.
 
 ```rust
-let document = spine::SpineDocument::new(File::open(&Path::new("skeleton.json")).unwrap())
-    .unwrap();
+let file = File::open(&Path::new("skeleton.json")).unwrap();
+let skeleton = spine::skeleton::Skeleton::from_reader(file).unwrap();
 ```
 
 ## Step 2: preparing for drawing
 
-You can retreive the list of animations and skins provided a document:
+You can retrieve the list of animations and skins provided a document:
 
 ```rust
-let skins = document.get_skins_list();
-
-let animations = document.get_animations_list();
-let first_animation_duration = document.get_animation_duration(animations[0]).unwrap();
+let skins = skeleton.get_skins_names();
+let animations = skeleton.get_animations_names();
 ```
 
 You can also get a list of the names of all the sprites that can possibly be drawn by this
  Spine animation.
 
 ```rust
-let sprites = document.get_possible_sprites();
+let sprites = skeleton.get_attachments_names();
 ```
 
-Note that the names do not necessarly match file names. They are the same names that you have in
+Note that the names do not necessarily match file names. They are the same names that you have in
  the Spine editor. It is your job to turn these resource names into file names if necessary.
 
 ## Step 3: animating
 
-At each frame, call `document.calculate()` in order to get the list of things that need to be
- drawn for the current animation.
+To run an animation, you first need to call `skeleton.get_animated_skin` to get a `SkinAnimation`.
 
-This function takes the skin name, the animation name (or `None` for the default pose) and the
- time in the current animation's loop.
+You then have 2 methods to get the sprites you need to draw:
+- directly call `animation.interpolate` for a given time
+- use a built-in `AnimationIter` iterator by calling `animation.run()` to run the animation
+with a constant period
+
+Both methods returns a `Sprites` iterator over the `Sprite`s do be drawn.
 
 ```rust
-let results = document.calculate("default", Some("walk"), 0.176).unwrap();
+let animation = skeleton.get_animated_skin("default", Some("walk")).unwrap();
+
+// either use `interpolate`
+let sprites = animation.interpolate(0.3).unwrap();
+// or use the iterator
+let sprites = animation
+              .run(0.1)  // iterator that interpolates sprites every 0.1s
+              .nth(3);   // get the 3rd item generated when time = 0.3
 ```
 
-The results contain the list of sprites that need to be drawn, with their matrix. The matrix
- supposes that each sprite would cover the whole viewport (ie. drawn from `(-1, -1)` to
- `(1, 1)`). The matrix is pre-multiplying ; if you want to apply your own matrix `C` over
- the one returned, you need to call `C * M`.
+The result contains an iterator over the sprites that need to be drawn with the `skeleton::SRT`
+(scale, rotate, translate)). The srt supposes that each sprite would cover the whole viewport
+(ie. drawn from `(-1, -1)` to `(1, 1)`).  You can convert it to a premultiplied matrix using
+`srt.to_matrix3()` or `srt.to_matrix4` ; if you want to apply your own matrix `C` over
+ the one returned `M`, you need to call `C * M`.
 
 ```rust
-for (sprite_name, matrix, color) in results.sprites.into_iter() {
-    let texture = textures_list.find(&sprite_name).unwrap();
-    draw(texture, matrix, color);
+for sprite in animation.interpolate(0.3).unwrap() {
+    let texture = textures_list.get(&&*sprite.attachment).unwrap();
+    draw(texture, &sprite.srt, &sprite.color);
 }
 ```
